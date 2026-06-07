@@ -29,8 +29,12 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-# Make sibling modules importable regardless of Streamlit's CWD.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Make sibling modules (actors.py, research_person.py) importable regardless of
+# the working directory. On Streamlit Community Cloud the CWD is the repo root,
+# not this subdirectory, so the entrypoint's own folder must be on sys.path.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
 
 from actors import REGISTRY, ApifyClient, ApifyError  # noqa: E402
 from research_person import (  # noqa: E402

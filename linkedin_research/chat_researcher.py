@@ -44,10 +44,10 @@ from research_person import (  # noqa: E402
     _item_type,
     _text,
     _url,
+    activity_note,
     fmt_field,
-    parse_item_date,
-    parse_since,
     render_markdown,
+    scrape_activity_tiered,
     slugify,
     split_name,
     titlecase,
@@ -291,28 +291,6 @@ def candidate_view(it: dict) -> dict:
         "location": fmt_field(it, "location.linkedinText", "location", "locationName"),
         "url": fmt_field(it, "linkedinUrl", "url", "profileUrl"),
     }
-
-
-def scrape_activity(client: ApifyClient, url: str, since) -> list[tuple]:
-    actor = REGISTRY["posts"]
-    run_input = {
-        "targetUrls": [url],
-        "maxPosts": MAX_POSTS,
-        "postedLimitDate": since.date().isoformat(),
-        "includeReposts": True,
-        "includeQuotePosts": True,
-        "scrapeComments": False,
-        "scrapeReactions": False,
-    }
-    items = client.run_actor(actor.actor_id, run_input)
-    rows = []
-    for it in items:
-        dt = parse_item_date(it)
-        if dt and dt < since:
-            continue
-        rows.append((dt, it))
-    rows.sort(key=lambda r: (r[0] is None, -(r[0].timestamp() if r[0] else 0)))
-    return rows
 
 
 # --------------------------------------------------------------------------- #
@@ -698,10 +676,9 @@ def handle_confirm(prompt: str, apify: ApifyClient) -> None:
     if not url:
         add("assistant", "That candidate has no profile URL to scrape. Pick another.")
         return
-    since = parse_since(None, DEFAULT_SINCE_DAYS)
     add("assistant",
         f"Confirmed **{chosen['name']}**. Pulling full profile + career history, "
-        f"then posts + reposts since **{since.date().isoformat()}** (newest first)…")
+        f"then scanning for posts (last 2 months, widening if empty)…")
 
     clean_url = url.rstrip("/")
     profile = None
@@ -710,12 +687,16 @@ def handle_confirm(prompt: str, apify: ApifyClient) -> None:
             profile = scrape_profile(apify, clean_url)
         except ApifyError as exc:
             add("assistant", f"⚠️ Apify error fetching profile: {exc}")
-    with st.spinner("Scraping activity via Apify…"):
+    # Tiered window fallback: 2 months -> 6 months -> 1 year -> 2 years.
+    with st.spinner("Scraping activity via Apify (expanding window if empty)…"):
         try:
-            rows = scrape_activity(apify, clean_url, since)
+            rows, used_days, since = scrape_activity_tiered(
+                apify, clean_url, MAX_POSTS,
+                on_message=lambda m: add("assistant", m))
         except ApifyError as exc:
             add("assistant", f"⚠️ Apify error during scrape: {exc}")
             return
+    note = activity_note(used_days)
 
     name = (fmt_field(profile or {}, "name", "fullName")
             or " ".join(x for x in (fmt_field(profile or {}, "firstName"),
@@ -728,7 +709,8 @@ def handle_confirm(prompt: str, apify: ApifyClient) -> None:
             ) if x)
             or " | ".join(x for x in (chosen["headline"], chosen["company"],
                                       chosen["location"]) if x))
-    md = render_markdown(name, role, url, since, rows, profile=profile)
+    md = render_markdown(name, role, url, since, rows, profile=profile,
+                         window_note=note)
     st.session_state.report_md = md   # kept for Q&A context + PDF rendering
     st.session_state.report_path = ""
     # Use the confirmed display name for the sidebar going forward.
@@ -756,15 +738,14 @@ def handle_confirm(prompt: str, apify: ApifyClient) -> None:
     else:
         add("assistant", "_(couldn't fetch the full profile — report has activity only)_")
 
-    if not rows:
-        add("assistant", "No posts or reposts found in this window.")
-    else:
-        for dt, it in rows:
-            date_str = dt.date().isoformat() if dt else "date n/a"
-            add("assistant",
-                f"**{date_str}** · _{_item_type(it)}_\n\n{_text(it).strip()}\n\n"
-                f"**Engagement:** {_engagement(it)}  \n"
-                f"**URL:** {_url(it) or 'n/a'}")
+    # State which window actually returned results (or that none did).
+    add("assistant", f"**{note}**")
+    for dt, it in rows:
+        date_str = dt.date().isoformat() if dt else "date n/a"
+        add("assistant",
+            f"**{date_str}** · _{_item_type(it)}_\n\n{_text(it).strip()}\n\n"
+            f"**Engagement:** {_engagement(it)}  \n"
+            f"**URL:** {_url(it) or 'n/a'}")
     counts: dict[str, int] = {}
     for _, it in rows:
         counts[_item_type(it)] = counts.get(_item_type(it), 0) + 1

@@ -154,6 +154,67 @@ def parse_item_date(item: dict) -> datetime | None:
 
 
 # --------------------------------------------------------------------------- #
+# Posts scraping with tiered time-window fallback
+# --------------------------------------------------------------------------- #
+POST_WINDOWS = [60, 180, 365, 730]
+WINDOW_LABEL = {60: "last 2 months", 180: "last 6 months",
+                365: "last 1 year", 730: "last 2 years"}
+# Messages shown when a window returns nothing and we widen to the next.
+EXPAND_MSG = [
+    "No activity in the last 2 months. Expanding search to 6 months...",
+    "Nothing in 6 months. Trying 1 year...",
+    "Nothing in 1 year. Trying 2 years...",
+]
+NO_ACTIVITY_MSG = ("No posts or reposts found in the last 2 years. Profile and "
+                   "career history have been captured above.")
+
+
+def scrape_posts(client: ApifyClient, url: str, since, max_posts: int) -> list[tuple]:
+    """Scrape posts/reposts since `since`, filtered + sorted newest-first."""
+    actor = REGISTRY["posts"]
+    items = client.run_actor(actor.actor_id, {
+        "targetUrls": [url],
+        "maxPosts": max_posts,
+        "postedLimitDate": since.date().isoformat(),
+        "includeReposts": True,
+        "includeQuotePosts": True,
+        "scrapeComments": False,
+        "scrapeReactions": False,
+    })
+    rows = []
+    for it in items:
+        dt = parse_item_date(it)
+        if dt and dt < since:
+            continue
+        rows.append((dt, it))
+    rows.sort(key=lambda r: (r[0] is None, -(r[0].timestamp() if r[0] else 0)))
+    return rows
+
+
+def scrape_activity_tiered(client: ApifyClient, url: str, max_posts: int,
+                           on_message=None, windows=POST_WINDOWS):
+    """Scrape posts, widening the window (60d -> 180d -> 365d -> 730d) until
+    results appear. Announces each expansion via on_message(text).
+    Returns (rows, used_days_or_None, used_since)."""
+    since = None
+    for i, days in enumerate(windows):
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        rows = scrape_posts(client, url, since, max_posts)
+        if rows:
+            return rows, days, since
+        if on_message and i < len(windows) - 1:
+            on_message(EXPAND_MSG[i])
+    return [], None, since
+
+
+def activity_note(used_days: int | None) -> str:
+    """One-line status of which window returned results (for report + chat)."""
+    if used_days is None:
+        return NO_ACTIVITY_MSG
+    return f"Activity found: showing posts from the {WINDOW_LABEL[used_days]}."
+
+
+# --------------------------------------------------------------------------- #
 # Phase 1: resolve
 # --------------------------------------------------------------------------- #
 def cmd_resolve(args: argparse.Namespace, client: ApifyClient) -> None:
@@ -267,35 +328,33 @@ def cmd_scrape(args: argparse.Namespace, client: ApifyClient) -> None:
         _eprint(f"(profile step skipped: {exc})")
     print()
 
-    # --- scrape posts + reposts ------------------------------------------- #
+    # --- scrape posts + reposts (tiered time-window fallback) -------------- #
     posts_actor = REGISTRY["posts"]
-    run_input = {
-        "targetUrls": [url],
-        "maxPosts": args.max_posts,
-        "postedLimitDate": since.date().isoformat(),
-        "includeReposts": True,
-        "includeQuotePosts": True,
-        "scrapeComments": False,
-        "scrapeReactions": False,
-    }
     print(f"== SCRAPE ACTIVITY ==")
     print(f"Actor : {posts_actor.human_name}")
     print(f"        {posts_actor.notes}")
-    print(f"Pull  : up to {args.max_posts} posts/reposts since "
-          f"{since.date().isoformat()} (~${args.max_posts * 0.002:.2f} worst case).\n")
 
-    items = client.run_actor(posts_actor.actor_id, run_input)
+    if args.since or args.days != 60:
+        # Explicit window requested -> single attempt, no fallback ladder.
+        since = parse_since(args.since, args.days)
+        print(f"Pull  : posts/reposts since {since.date().isoformat()}.\n")
+        rows = scrape_posts(client, url, since, args.max_posts)
+        note = (f"Activity window: posts since {since.date().isoformat()}."
+                if rows else
+                f"No posts or reposts found since {since.date().isoformat()}.")
+    else:
+        # Default flow: 2 months, expanding to 6 months, 1 year, then 2 years.
+        print(f"Pull  : posts/reposts, starting at 2 months and widening "
+              f"if empty.\n")
+        rows, used_days, since = scrape_activity_tiered(
+            client, url, args.max_posts, on_message=print)
+        note = activity_note(used_days)
 
-    rows = []
-    for it in items:
-        dt = parse_item_date(it)
-        if dt and dt < since:
-            continue
-        rows.append((dt, it))
-    rows.sort(key=lambda r: (r[0] is None, -(r[0].timestamp() if r[0] else 0)))
+    print(note + "\n")
 
     person_label = name or titlecase(args.name)
-    report = render_markdown(person_label, role, url, since, rows, profile=profile)
+    report = render_markdown(person_label, role, url, since, rows,
+                             profile=profile, window_note=note)
     out_path = os.path.join(
         os.getcwd(), f"{slugify(person_label)}.md"
     )
@@ -401,14 +460,19 @@ def render_profile_section(profile: dict | None) -> list[str]:
     return lines
 
 
-def render_markdown(name, role, profile_url, since, rows, profile=None) -> str:
+def render_markdown(name, role, profile_url, since, rows, profile=None,
+                    window_note=None) -> str:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
         f"# Public activity: {name}",
         "",
         f"- **Profile:** {profile_url}",
         f"- **Current role:** {role or 'n/a'}",
-        f"- **Window:** since {since.date().isoformat()} (newest first)",
+    ]
+    if window_note:
+        lines.append(f"- **{window_note}**")
+    lines += [
+        f"- **Window scanned:** since {since.date().isoformat()} (newest first)",
         f"- **Items found:** {len(rows)}",
         f"- **Generated:** {now}",
         "",
@@ -425,7 +489,7 @@ def render_markdown(name, role, profile_url, since, rows, profile=None) -> str:
 
     lines += ["## Recent activity", ""]
     if not rows:
-        lines.append("_No posts or reposts found in this window._")
+        lines.append(f"_{window_note or 'No posts or reposts found.'}_")
         return "\n".join(lines)
 
     for dt, it in rows:

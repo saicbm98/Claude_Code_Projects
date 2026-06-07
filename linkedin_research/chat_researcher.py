@@ -46,7 +46,7 @@ from research_person import (  # noqa: E402
     split_name,
 )
 
-QA_MODEL = "claude-sonnet-4-20250514"  # model requested for Q&A
+QA_MODEL = "claude-sonnet-4-6"  # Claude Sonnet 4.6 for extraction + Q&A
 DEFAULT_SINCE_DAYS = 60
 MAX_CANDIDATES = 5
 MAX_POSTS = 40

@@ -1,0 +1,4 @@
+# Core CLI (research_person.py) uses only the Python standard library.
+# The Streamlit chat UI (chat_researcher.py) needs these:
+streamlit>=1.40
+anthropic>=0.40        # optional: enables LLM extraction + Q&A

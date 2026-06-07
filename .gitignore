@@ -1,0 +1,19 @@
+.env
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+
+# Streamlit secrets — NEVER commit real API keys
+.streamlit/secrets.toml
+
+# Scraped LinkedIn activity reports (contain real people's personal data)
+/karina-mazur.md
+/lauren-peate.md
+/dr-carsten-hallwass.md

@@ -3,3 +3,4 @@
 streamlit>=1.40
 anthropic>=0.40        # optional: enables LLM extraction + Q&A
 reportlab>=4.0         # render the downloadable report as a PDF
+pillow>=9.2            # rasterize color emoji into the PDF (usually pulled in by streamlit)

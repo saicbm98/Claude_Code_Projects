@@ -407,8 +407,80 @@ def _ensure_fonts() -> None:
         pass  # keep Helvetica fallback
 
 
+# Emoji clusters (base emoji + ZWJ joins, variation selectors, skin tones).
+_EMOJI_RE = re.compile(
+    "(?:[\U0001F300-\U0001FAFF\U00002600-\U000026FF\U00002700-\U000027BF"
+    "\U00002B00-\U00002BFF\U0001F000-\U0001F0FF\U000024C2\U00002139"
+    "\U0000FE0F\U0000200D\U000020E3\U0001F1E6-\U0001F1FF\U0001F3FB-\U0001F3FF]+)"
+)
+_EMOJI_FONT: dict = {"loaded": False, "font": None}
+
+
+def _emoji_font():
+    """A color emoji font from the host (Noto Color Emoji on Linux/Cloud, Segoe
+    UI Emoji on Windows, Apple Color Emoji on macOS), or None."""
+    if _EMOJI_FONT["loaded"]:
+        return _EMOJI_FONT["font"]
+    _EMOJI_FONT["loaded"] = True
+    try:
+        from PIL import ImageFont
+    except Exception:
+        return None
+    candidates = [
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/noto/NotoColorEmoji.ttf",
+        "C:\\Windows\\Fonts\\seguiemj.ttf",
+        "/System/Library/Fonts/Apple Color Emoji.ttc",
+    ]
+    for path in candidates:
+        if not os.path.exists(path):
+            continue
+        for size in (109, 137, 96, 64, 48):  # bitmap fonts need a strike size
+            try:
+                _EMOJI_FONT["font"] = ImageFont.truetype(path, size)
+                return _EMOJI_FONT["font"]
+            except Exception:
+                continue
+    return None
+
+
+def _emoji_png(cluster: str) -> str | None:
+    """Rasterize one emoji (cluster) to a cached transparent color PNG; path."""
+    font = _emoji_font()
+    if font is None:
+        return None
+    try:
+        import tempfile
+        from PIL import Image, ImageDraw
+        cache = os.path.join(tempfile.gettempdir(), "cr_emoji")
+        os.makedirs(cache, exist_ok=True)
+        key = "-".join(f"{ord(c):x}" for c in cluster)
+        path = os.path.join(cache, key + ".png")
+        if os.path.exists(path):
+            return path
+        probe = ImageDraw.Draw(Image.new("RGBA", (8, 8)))
+        box = probe.textbbox((0, 0), cluster, font=font, embedded_color=True)
+        w, h = max(1, box[2] - box[0]), max(1, box[3] - box[1])
+        canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        ImageDraw.Draw(canvas).text((-box[0], -box[1]), cluster, font=font,
+                                    embedded_color=True)
+        canvas.save(path)
+        return path
+    except Exception:
+        return None
+
+
 def _inline(text: str) -> str:
-    """Markdown inline -> reportlab mini-HTML. Escapes XML, then **bold**/_italic_."""
+    """Markdown inline -> reportlab mini-HTML: **bold**, _italic_, inline emoji
+    images. Emoji are stashed before escaping so tags can't be corrupted."""
+    emojis: list[str] = []
+
+    def _stash(m):
+        emojis.append(m.group(0))
+        return f"\x00{len(emojis) - 1}\x00"
+
+    text = _EMOJI_RE.sub(_stash, text)
+
     if not _FONTS["unicode"]:
         for k, v in _SANITIZE.items():
             text = text.replace(k, v)
@@ -416,7 +488,16 @@ def _inline(text: str) -> str:
     text = html.escape(text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
     text = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"<i>\1</i>", text)
-    return text
+
+    def _unstash(m):
+        cluster = emojis[int(m.group(1))]
+        png = _emoji_png(cluster)
+        if png:
+            src = png.replace("\\", "/")
+            return f'<img src="{src}" width="12" height="12" valign="-2"/>'
+        return cluster if _FONTS["unicode"] else ""
+
+    return re.sub("\x00(\\d+)\x00", _unstash, text)
 
 
 def render_pdf(person_name: str, report_md: str) -> bytes:

@@ -4,21 +4,23 @@
 Run:
     streamlit run chat_researcher.py
 
+Sessions (like Claude.ai / ChatGPT):
+    Every conversation is persisted to sessions/<slug>.json and listed in the
+    sidebar (newest first). Saved after every message. Click a past session to
+    reload its full history and keep asking questions; "New search" starts a
+    fresh chat while the sidebar history stays intact.
+
 Phase 1 - RESEARCH:
     Type naturally, e.g. "Lauren Peate, Multitudes, Auckland New Zealand".
-    The app extracts name/company/location, resolves candidate profiles, and
-    asks you to confirm. Reply "yes" or a number to pick. It then scrapes posts
-    + reposts (newest first) and saves a markdown report.
+    Resolve candidates -> confirm -> scrape full profile + posts -> report.
 
 Phase 2 - Q&A:
-    Ask questions about the scraped activity ("what has she been posting about",
-    "summarise her activity", "any career themes"). Answered by Claude using the
-    scraped markdown as context.
+    Ask questions about the scraped activity, answered by Claude using the
+    scraped markdown report as context.
 
 Secrets:
     APIFY_TOKEN       - required (Apify backend).
-    ANTHROPIC_API_KEY - optional; enables LLM extraction + Q&A. Without it, the
-                        app falls back to simple comma parsing and disables Q&A.
+    ANTHROPIC_API_KEY - optional; enables LLM extraction + Q&A.
 """
 from __future__ import annotations
 
@@ -55,26 +57,136 @@ QA_MODEL = "claude-sonnet-4-6"  # Claude Sonnet 4.6 for extraction + Q&A
 DEFAULT_SINCE_DAYS = 60
 MAX_CANDIDATES = 5
 MAX_POSTS = 40
+SESSIONS_DIRNAME = "sessions"
+GREETING = ("Ready. Who do you want to research? Give me a **name, company, "
+            "and location** — e.g. `Lauren Peate, Multitudes, Auckland New Zealand`.")
 
 
 # --------------------------------------------------------------------------- #
 # Secrets bridge: Streamlit Cloud -> os.environ
 # --------------------------------------------------------------------------- #
 def load_secrets_into_env() -> None:
-    """Copy Streamlit secrets into os.environ.
-
-    On Streamlit Community Cloud, secrets set in the dashboard are exposed via
-    st.secrets (not always as OS env vars). We copy top-level string secrets
-    into os.environ so the whole app can keep reading them with
-    os.environ.get(...), which also works locally with plain env vars.
-    No-op when there's no secrets.toml (e.g. local CLI runs).
-    """
+    """Copy top-level Streamlit secrets into os.environ so the app can read
+    them with os.environ.get(...) both on Cloud and locally. No-op locally."""
     try:
         for key, value in st.secrets.items():
             if isinstance(value, str) and not os.environ.get(key):
                 os.environ[key] = value
     except Exception:
-        pass  # no secrets configured -> rely on real environment variables
+        pass
+
+
+# --------------------------------------------------------------------------- #
+# Session persistence (sessions/<slug>.json)
+# --------------------------------------------------------------------------- #
+def sessions_dir() -> str:
+    d = os.path.join(os.getcwd(), SESSIONS_DIRNAME)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _fmt_date(iso: str, mtime: float | None = None) -> str:
+    try:
+        dt = datetime.fromisoformat(iso)
+    except (ValueError, TypeError):
+        if mtime:
+            dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
+        else:
+            return ""
+    return dt.strftime("%b %d, %H:%M")
+
+
+def save_session() -> None:
+    """Write the active session to disk. No-op until a slug exists (i.e. until
+    the person's name is known). Called after every message."""
+    ss = st.session_state
+    slug = ss.get("slug")
+    if not slug:
+        return
+    data = {
+        "slug": slug,
+        "person_name": ss.get("person_name") or "Untitled",
+        "created_at": ss.get("created_at") or _now_iso(),
+        "messages": ss.get("messages", []),
+        "report_md": ss.get("report_md", ""),
+    }
+    try:
+        path = os.path.join(sessions_dir(), f"{slug}.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+    except Exception:
+        pass  # never let a persistence hiccup break the chat
+
+
+def list_sessions() -> list[dict]:
+    """All saved sessions, newest first."""
+    out: list[dict] = []
+    try:
+        for fn in os.listdir(sessions_dir()):
+            if not fn.endswith(".json"):
+                continue
+            path = os.path.join(sessions_dir(), fn)
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    d = json.load(fh)
+            except Exception:
+                continue
+            mtime = os.path.getmtime(path)
+            out.append({
+                "slug": d.get("slug") or fn[:-5],
+                "person_name": d.get("person_name") or fn[:-5],
+                "created_at": d.get("created_at") or "",
+                "has_report": bool(d.get("report_md")),
+                "date_label": _fmt_date(d.get("created_at", ""), mtime),
+                "_sort": d.get("created_at") or "",
+                "_mtime": mtime,
+            })
+    except Exception:
+        pass
+    out.sort(key=lambda s: (s["_sort"], s["_mtime"]), reverse=True)
+    return out
+
+
+def register_session(name: str) -> None:
+    """Create the session id once the person's name is known (Phase 1)."""
+    ss = st.session_state
+    if ss.get("slug"):
+        return
+    ss.person_name = name
+    ss.created_at = _now_iso()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    ss.slug = f"{slugify(name)}-{stamp}"
+    save_session()
+
+
+def load_session(slug: str) -> None:
+    """Restore a saved session into Phase 2 Q&A mode."""
+    path = os.path.join(sessions_dir(), f"{slug}.json")
+    with open(path, encoding="utf-8") as fh:
+        d = json.load(fh)
+    ss = st.session_state
+    ss.messages = d.get("messages", [])
+    ss.report_md = d.get("report_md", "")
+    ss.report_path = ""
+    ss.person_name = d.get("person_name", "")
+    ss.created_at = d.get("created_at", _now_iso())
+    ss.slug = slug
+    ss.phase = "qa"
+    ss.candidates = []
+    ss.query = {}
+
+
+def new_session() -> None:
+    """Clear the main chat for a fresh search. Sidebar history is on disk, so
+    it survives untouched."""
+    for k in ("messages", "phase", "candidates", "query", "report_md",
+              "report_path", "person_name", "created_at", "slug"):
+        st.session_state.pop(k, None)
+    init_state()
 
 
 # --------------------------------------------------------------------------- #
@@ -98,9 +210,7 @@ def get_anthropic():
 # --------------------------------------------------------------------------- #
 def extract_query(message: str, client) -> dict:
     """Return {name, location, current_company, past_company}.
-
-    Prefer the Claude API for messy input; fall back to comma parsing.
-    """
+    Prefer the Claude API for messy input; fall back to comma parsing."""
     if client is not None:
         try:
             schema = {
@@ -131,9 +241,8 @@ def extract_query(message: str, client) -> dict:
             if data.get("name"):
                 return data
         except Exception:
-            pass  # fall through to parsing
+            pass
 
-    # Simple comma parsing: "Name, Company, Location"
     parts = [p.strip() for p in message.split(",") if p.strip()]
     out = {"name": "", "location": "", "current_company": "", "past_company": ""}
     if parts:
@@ -165,7 +274,6 @@ def resolve_candidates(client: ApifyClient, first: str, last: str,
 
 
 def scrape_profile(client: ApifyClient, url: str) -> dict | None:
-    """Pull the full profile (identity + career history + about)."""
     actor = REGISTRY["confirm"]  # harvestapi/linkedin-profile-scraper
     items = client.run_actor(
         actor.actor_id,
@@ -211,20 +319,21 @@ def scrape_activity(client: ApifyClient, url: str, since) -> list[tuple]:
 # Chat helpers
 # --------------------------------------------------------------------------- #
 def add(role: str, content: str) -> None:
-    st.session_state.messages.append({"role": role, "content": content})
+    """Append a message AND persist the session (saved after every message)."""
+    st.session_state.messages.append(
+        {"role": role, "content": content, "timestamp": _now_iso()})
+    save_session()
 
 
 def render_message(role: str, content: str) -> None:
     with st.chat_message(role):
         if role == "user":
-            # marker span lets CSS right-align + tint user bubbles
             st.markdown('<span class="cr-user"></span>', unsafe_allow_html=True)
         st.markdown(content)
 
 
 WHATSAPP_CSS = """
 <style>
-/* Right-align + green tint for user messages (WhatsApp style) */
 [data-testid="stChatMessage"]:has(.cr-user) {
     flex-direction: row-reverse;
     text-align: right;
@@ -233,7 +342,6 @@ WHATSAPP_CSS = """
     padding: 8px 12px;
     margin-left: 18%;
 }
-/* Assistant messages: left, light grey */
 [data-testid="stChatMessage"]:not(:has(.cr-user)) {
     background: #f5f5f5;
     border-radius: 12px;
@@ -252,10 +360,10 @@ def answer_question(client, question: str, markdown_ctx: str):
     """Stream an answer using ONLY the scraped markdown as context."""
     system = (
         "You are a research assistant. Answer the user's question about this "
-        "person using ONLY the LinkedIn activity report below as your source. "
-        "If the answer isn't in the report, say so plainly. Be concise and "
-        "specific; cite dates where useful.\n\n"
-        "=== SCRAPED ACTIVITY REPORT ===\n" + markdown_ctx
+        "person using ONLY the LinkedIn report below as your source. If the "
+        "answer isn't in the report, say so plainly. Be concise and specific; "
+        "cite dates where useful.\n\n"
+        "=== SCRAPED REPORT ===\n" + (markdown_ctx or "(no report available)")
     )
     with client.messages.stream(
         model=QA_MODEL,
@@ -267,7 +375,7 @@ def answer_question(client, question: str, markdown_ctx: str):
 
 
 # --------------------------------------------------------------------------- #
-# App
+# Phase handlers
 # --------------------------------------------------------------------------- #
 def init_state() -> None:
     ss = st.session_state
@@ -277,10 +385,12 @@ def init_state() -> None:
     ss.setdefault("query", {})
     ss.setdefault("report_md", "")
     ss.setdefault("report_path", "")
+    ss.setdefault("person_name", "")
+    ss.setdefault("created_at", "")
+    ss.setdefault("slug", None)
     if not ss.messages:
-        add("assistant",
-            "Ready. Who do you want to research? Give me a **name, company, "
-            "and location** — e.g. `Lauren Peate, Multitudes, Auckland New Zealand`.")
+        ss.messages.append(
+            {"role": "assistant", "content": GREETING, "timestamp": _now_iso()})
 
 
 def handle_query(prompt: str, apify: ApifyClient, ai) -> None:
@@ -289,12 +399,15 @@ def handle_query(prompt: str, apify: ApifyClient, ai) -> None:
         add("assistant", "I couldn't spot a name there. Try `Name, Company, Location`.")
         return
 
-    # FIX 1: normalise name/company/location to title case before the API call.
+    # Normalise name/company/location to title case before the API call.
     q["name"] = titlecase(q.get("name", ""))
     q["current_company"] = titlecase(q.get("current_company", ""))
     q["past_company"] = titlecase(q.get("past_company", ""))
     q["location"] = titlecase(q.get("location", ""))
     st.session_state.query = q
+
+    # Register the session now that the person's name is known.
+    register_session(q["name"])
 
     first, last = split_name(q["name"])
     location = q.get("location") or None
@@ -304,7 +417,7 @@ def handle_query(prompt: str, apify: ApifyClient, ai) -> None:
                + "  \n_(cheap search — no activity scraped yet)_")
     add("assistant", summary)
 
-    # FIX 2: fallback ladder — name+location, then name only (deduped).
+    # Fallback ladder: name+location, then name only (deduped).
     attempts: list[tuple[str, str | None]] = []
     if location:
         attempts.append(("name + location", location))
@@ -347,7 +460,6 @@ def handle_query(prompt: str, apify: ApifyClient, ai) -> None:
 def handle_confirm(prompt: str, apify: ApifyClient) -> None:
     cands = st.session_state.candidates
     choice = prompt.strip().lower()
-    idx = 0
     if choice in ("yes", "y", "confirm", "1", "first"):
         idx = 0
     elif choice.isdigit():
@@ -387,7 +499,6 @@ def handle_confirm(prompt: str, apify: ApifyClient) -> None:
             add("assistant", f"⚠️ Apify error during scrape: {exc}")
             return
 
-    # Prefer the live profile for name/role; fall back to the candidate card.
     name = (fmt_field(profile or {}, "name", "fullName")
             or " ".join(x for x in (fmt_field(profile or {}, "firstName"),
                                     fmt_field(profile or {}, "lastName")) if x)
@@ -401,12 +512,17 @@ def handle_confirm(prompt: str, apify: ApifyClient) -> None:
                                       chosen["location"]) if x))
     md = render_markdown(name, role, url, since, rows, profile=profile)
     path = os.path.join(os.getcwd(), f"{slugify(name)}.md")
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(md)
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(md)
+    except Exception:
+        path = ""
     st.session_state.report_md = md
     st.session_state.report_path = path
+    # Use the confirmed display name for the sidebar going forward.
+    st.session_state.person_name = name
+    save_session()
 
-    # Surface the captured profile / career history in chat.
     if profile:
         exp = profile.get("experience") or []
         about = fmt_field(profile, "about", "summary")
@@ -442,39 +558,65 @@ def handle_confirm(prompt: str, apify: ApifyClient) -> None:
         counts[_item_type(it)] = counts.get(_item_type(it), 0) + 1
     summary = ", ".join(f"{v} {k}" for k, v in counts.items())
     add("assistant", f"**Done — {len(rows)} item(s)** ({summary or 'none'}).")
-    add("assistant", f"📄 Report saved to **{os.path.basename(path)}**")
+    add("assistant", "📄 Report ready — use the **Download report** button above.")
     add("assistant",
-        "You can now ask me anything about this activity — e.g. _what has she "
-        "been posting about_, _summarise her activity_, _any career themes_.")
+        "You can now ask me anything about this person — e.g. _what has she "
+        "been posting about_, _summarise her career_, _any recurring themes_.")
     st.session_state.phase = "qa"
+
+
+# --------------------------------------------------------------------------- #
+# UI
+# --------------------------------------------------------------------------- #
+def render_sidebar() -> None:
+    ss = st.session_state
+    with st.sidebar:
+        st.header("🔎 Activity Researcher")
+        if st.button("➕  New search", use_container_width=True):
+            new_session()
+            st.rerun()
+        st.caption(
+            f"Apify {'✅' if os.environ.get('APIFY_TOKEN') else '❌'}"
+            f"  ·  Claude {'✅' if os.environ.get('ANTHROPIC_API_KEY') else '❌'}"
+        )
+        st.divider()
+        st.subheader("History")
+        sessions = list_sessions()
+        if not sessions:
+            st.caption("No saved sessions yet.")
+        for s in sessions:
+            active = s["slug"] == ss.get("slug")
+            icon = "📄" if s["has_report"] else "💬"
+            label = f"{icon}  {s['person_name']}  ·  {s['date_label']}"
+            if st.button(label, key=f"sess_{s['slug']}", use_container_width=True,
+                         type="primary" if active else "secondary"):
+                load_session(s["slug"])
+                st.rerun()
 
 
 def main() -> None:
     st.set_page_config(page_title="LinkedIn Activity Researcher", page_icon="🔎")
-    load_secrets_into_env()  # Streamlit Cloud secrets -> os.environ
+    load_secrets_into_env()
     st.markdown(WHATSAPP_CSS, unsafe_allow_html=True)
     init_state()
+    render_sidebar()
 
-    with st.sidebar:
-        st.header("🔎 Activity Researcher")
-        st.caption("LinkedIn-first, Apify-backed. Resolve → confirm → scrape → ask.")
-        st.write("**Apify token:**", "✅ set" if os.environ.get("APIFY_TOKEN") else "❌ missing")
-        st.write("**Claude (Q&A):**", "✅ set" if os.environ.get("ANTHROPIC_API_KEY") else "❌ off")
-        if st.session_state.report_path:
-            st.success(f"Report: {os.path.basename(st.session_state.report_path)}")
-        if st.button("🔄 New search"):
-            for k in ("messages", "phase", "candidates", "query",
-                      "report_md", "report_path"):
-                st.session_state.pop(k, None)
-            st.rerun()
+    # Download button for the report (after a scrape, or on a loaded session).
+    if st.session_state.report_md:
+        st.download_button(
+            "⬇️  Download report (.md)",
+            data=st.session_state.report_md,
+            file_name=f"{slugify(st.session_state.person_name or 'report')}.md",
+            mime="text/markdown",
+            key="dl_report",
+        )
 
     # Replay history
     for m in st.session_state.messages:
         render_message(m["role"], m["content"])
 
-    # Guard: Apify token
     apify_token = os.environ.get("APIFY_TOKEN", "").strip()
-    placeholder = ("Ask about the activity…" if st.session_state.phase == "qa"
+    placeholder = ("Ask about this person…" if st.session_state.phase == "qa"
                    else "Name, company, location…")
     prompt = st.chat_input(placeholder)
     if not prompt:
@@ -484,9 +626,8 @@ def main() -> None:
         render_message("user", prompt)
         add("user", prompt)
         add("assistant",
-            "**APIFY_TOKEN is not set.** Set it in your environment and restart:\n"
-            "`$env:APIFY_TOKEN = 'apify_api_...'` (PowerShell) then "
-            "`streamlit run chat_researcher.py`.")
+            "**APIFY_TOKEN is not set.** Set it (or add it to Streamlit secrets) "
+            "and reload.")
         st.rerun()
 
     apify = ApifyClient(token=apify_token) if apify_token else None
@@ -496,10 +637,9 @@ def main() -> None:
     phase = st.session_state.phase
 
     if phase == "qa":
-        # render user, then stream answer live (handle_qa renders its own bubble)
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        add("user", prompt)
         if ai is None:
-            add("assistant", "Q&A needs `ANTHROPIC_API_KEY`. Set it and restart.")
+            add("assistant", "Q&A needs `ANTHROPIC_API_KEY`. Add it to secrets and reload.")
         else:
             with st.chat_message("assistant"):
                 try:
@@ -508,7 +648,7 @@ def main() -> None:
                 except Exception as exc:
                     answer = f"⚠️ Q&A error: {exc}"
                     st.markdown(answer)
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+            add("assistant", answer)
         return
 
     add("user", prompt)

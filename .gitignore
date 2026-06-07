@@ -17,3 +17,7 @@ build/
 /karina-mazur.md
 /lauren-peate.md
 /dr-carsten-hallwass.md
+
+# Saved chat sessions (contain scraped personal data)
+sessions/
+linkedin_research/sessions/

@@ -2,3 +2,4 @@
 # The Streamlit chat UI (chat_researcher.py) needs these:
 streamlit>=1.40
 anthropic>=0.40        # optional: enables LLM extraction + Q&A
+reportlab>=4.0         # render the downloadable report as a PDF

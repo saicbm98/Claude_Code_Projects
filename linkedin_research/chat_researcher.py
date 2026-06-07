@@ -354,6 +354,143 @@ WHATSAPP_CSS = """
 
 
 # --------------------------------------------------------------------------- #
+# PDF report rendering (reportlab)
+# --------------------------------------------------------------------------- #
+import html  # noqa: E402
+import re  # noqa: E402
+from io import BytesIO  # noqa: E402
+
+_FONTS = {"ready": False, "base": "Helvetica", "bold": "Helvetica-Bold", "unicode": False}
+_SANITIZE = {
+    "—": "-", "–": "-", "‘": "'", "’": "'",
+    "“": '"', "”": '"', "…": "...", "•": "-",
+    " ": " ",
+}
+
+
+def _find_unicode_font() -> tuple[str | None, str | None]:
+    """Locate a Unicode TTF (+ bold) already on the host, so the PDF can render
+    em-dashes, curly quotes, accents, etc. Falls back to None (Helvetica)."""
+    pairs = [
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+        ("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+         "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"),
+        ("C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\arialbd.ttf"),
+        ("C:\\Windows\\Fonts\\segoeui.ttf", "C:\\Windows\\Fonts\\segoeuib.ttf"),
+        ("/System/Library/Fonts/Supplemental/Arial.ttf",
+         "/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
+    ]
+    for reg, bold in pairs:
+        if os.path.exists(reg):
+            return reg, (bold if os.path.exists(bold) else reg)
+    return None, None
+
+
+def _ensure_fonts() -> None:
+    if _FONTS["ready"]:
+        return
+    _FONTS["ready"] = True
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        reg, bold = _find_unicode_font()
+        if reg:
+            pdfmetrics.registerFont(TTFont("ReportBody", reg))
+            pdfmetrics.registerFont(TTFont("ReportBody-Bold", bold))
+            pdfmetrics.registerFontFamily("ReportBody", normal="ReportBody",
+                                          bold="ReportBody-Bold")
+            _FONTS.update(base="ReportBody", bold="ReportBody-Bold", unicode=True)
+    except Exception:
+        pass  # keep Helvetica fallback
+
+
+def _inline(text: str) -> str:
+    """Markdown inline -> reportlab mini-HTML. Escapes XML, then **bold**/_italic_."""
+    if not _FONTS["unicode"]:
+        for k, v in _SANITIZE.items():
+            text = text.replace(k, v)
+        text = text.encode("latin-1", "ignore").decode("latin-1")
+    text = html.escape(text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"<i>\1</i>", text)
+    return text
+
+
+def render_pdf(person_name: str, report_md: str) -> bytes:
+    """Render the markdown report to a readable, paginated PDF."""
+    _ensure_fonts()
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (HRFlowable, Paragraph, SimpleDocTemplate,
+                                    Spacer)
+
+    base, bold = _FONTS["base"], _FONTS["bold"]
+    body = ParagraphStyle("body", fontName=base, fontSize=10, leading=14,
+                          spaceAfter=2)
+    h1 = ParagraphStyle("h1", fontName=bold, fontSize=18, leading=22,
+                        spaceAfter=8, textColor=colors.HexColor("#0a66c2"))
+    h2 = ParagraphStyle("h2", fontName=bold, fontSize=14, leading=18,
+                        spaceBefore=10, spaceAfter=4,
+                        textColor=colors.HexColor("#222222"))
+    h3 = ParagraphStyle("h3", fontName=bold, fontSize=11.5, leading=15,
+                        spaceBefore=6, spaceAfter=2)
+    bullet = ParagraphStyle("bullet", parent=body, leftIndent=12)
+    quote = ParagraphStyle("quote", fontName=base, fontSize=9, leading=13,
+                           leftIndent=10, textColor=colors.HexColor("#666666"))
+
+    flow: list = []
+    for raw in (report_md or "").splitlines():
+        line = raw.rstrip()
+        if not line.strip():
+            flow.append(Spacer(1, 5))
+        elif line.startswith("# "):
+            flow.append(Paragraph(_inline(line[2:]), h1))
+        elif line.startswith("## "):
+            flow.append(Paragraph(_inline(line[3:]), h2))
+        elif line.startswith("### "):
+            flow.append(Paragraph(_inline(line[4:]), h3))
+        elif line.startswith("> "):
+            flow.append(Paragraph(_inline(line[2:]), quote))
+        elif line.strip() == "---":
+            flow.append(Spacer(1, 3))
+            flow.append(HRFlowable(width="100%", thickness=0.5,
+                                   color=colors.HexColor("#dddddd")))
+            flow.append(Spacer(1, 3))
+        elif line.lstrip().startswith(("- ", "* ")):
+            flow.append(Paragraph("•&nbsp;" + _inline(line.lstrip()[2:]), bullet))
+        else:
+            flow.append(Paragraph(_inline(line), body))
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, title=f"{person_name} — LinkedIn report",
+        topMargin=1.6 * cm, bottomMargin=1.6 * cm,
+        leftMargin=1.8 * cm, rightMargin=1.8 * cm,
+    )
+    doc.build(flow)
+    return buf.getvalue()
+
+
+def report_download():
+    """(data, file_name, mime, label) for the report download button.
+    PDF when possible; falls back to markdown if reportlab is unavailable."""
+    md = st.session_state.report_md
+    name = st.session_state.person_name or "report"
+    slug = slugify(name)
+    try:
+        return (render_pdf(name, md), f"{slug}.pdf", "application/pdf",
+                "⬇️  Download report (PDF)")
+    except Exception:
+        return (md.encode("utf-8"), f"{slug}.md", "text/markdown",
+                "⬇️  Download report (.md — PDF unavailable)")
+
+
+# --------------------------------------------------------------------------- #
 # Q&A
 # --------------------------------------------------------------------------- #
 def answer_question(client, question: str, markdown_ctx: str):
@@ -511,14 +648,8 @@ def handle_confirm(prompt: str, apify: ApifyClient) -> None:
             or " | ".join(x for x in (chosen["headline"], chosen["company"],
                                       chosen["location"]) if x))
     md = render_markdown(name, role, url, since, rows, profile=profile)
-    path = os.path.join(os.getcwd(), f"{slugify(name)}.md")
-    try:
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(md)
-    except Exception:
-        path = ""
-    st.session_state.report_md = md
-    st.session_state.report_path = path
+    st.session_state.report_md = md   # kept for Q&A context + PDF rendering
+    st.session_state.report_path = ""
     # Use the confirmed display name for the sidebar going forward.
     st.session_state.person_name = name
     save_session()
@@ -603,13 +734,9 @@ def main() -> None:
 
     # Download button for the report (after a scrape, or on a loaded session).
     if st.session_state.report_md:
-        st.download_button(
-            "⬇️  Download report (.md)",
-            data=st.session_state.report_md,
-            file_name=f"{slugify(st.session_state.person_name or 'report')}.md",
-            mime="text/markdown",
-            key="dl_report",
-        )
+        data, file_name, mime, label = report_download()
+        st.download_button(label, data=data, file_name=file_name, mime=mime,
+                           key="dl_report")
 
     # Replay history
     for m in st.session_state.messages:

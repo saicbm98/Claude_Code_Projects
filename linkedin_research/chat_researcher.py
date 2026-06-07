@@ -44,6 +44,7 @@ from research_person import (  # noqa: E402
     render_markdown,
     slugify,
     split_name,
+    titlecase,
 )
 
 QA_MODEL = "claude-sonnet-4-6"  # Claude Sonnet 4.6 for extraction + Q&A
@@ -143,9 +144,9 @@ def extract_query(message: str, client) -> dict:
 # --------------------------------------------------------------------------- #
 # Apify steps
 # --------------------------------------------------------------------------- #
-def resolve_candidates(client: ApifyClient, q: dict) -> list[dict]:
+def resolve_candidates(client: ApifyClient, first: str, last: str,
+                       location: str | None) -> list[dict]:
     actor = REGISTRY["resolve"]
-    first, last = split_name(q["name"])
     run_input = {
         "firstName": first,
         "lastName": last,
@@ -154,9 +155,20 @@ def resolve_candidates(client: ApifyClient, q: dict) -> list[dict]:
         "maxItems": MAX_CANDIDATES,
         "strictSearch": True,
     }
-    if q.get("location"):
-        run_input["locations"] = [q["location"]]
+    if location:
+        run_input["locations"] = [location]
     return client.run_actor(actor.actor_id, run_input)
+
+
+def scrape_profile(client: ApifyClient, url: str) -> dict | None:
+    """Pull the full profile (identity + career history + about)."""
+    actor = REGISTRY["confirm"]  # harvestapi/linkedin-profile-scraper
+    items = client.run_actor(
+        actor.actor_id,
+        {"profileScraperMode": "Profile details no email ($4 per 1k)",
+         "queries": [url]},
+    )
+    return items[0] if items else None
 
 
 def candidate_view(it: dict) -> dict:
@@ -272,20 +284,46 @@ def handle_query(prompt: str, apify: ApifyClient, ai) -> None:
     if not q.get("name"):
         add("assistant", "I couldn't spot a name there. Try `Name, Company, Location`.")
         return
+
+    # FIX 1: normalise name/company/location to title case before the API call.
+    q["name"] = titlecase(q.get("name", ""))
+    q["current_company"] = titlecase(q.get("current_company", ""))
+    q["past_company"] = titlecase(q.get("past_company", ""))
+    q["location"] = titlecase(q.get("location", ""))
     st.session_state.query = q
+
+    first, last = split_name(q["name"])
+    location = q.get("location") or None
     summary = (f"Searching for **{q['name']}**"
                + (f" · {q['current_company']}" if q.get("current_company") else "")
-               + (f" · {q['location']}" if q.get("location") else "")
+               + (f" · {location}" if location else "")
                + "  \n_(cheap search — no activity scraped yet)_")
     add("assistant", summary)
-    with st.spinner("Resolving candidate profiles via Apify…"):
-        try:
-            items = resolve_candidates(apify, q)
-        except ApifyError as exc:
-            add("assistant", f"⚠️ Apify error during resolve: {exc}")
-            return
+
+    # FIX 2: fallback ladder — name+location, then name only (deduped).
+    attempts: list[tuple[str, str | None]] = []
+    if location:
+        attempts.append(("name + location", location))
+    attempts.append(("name only", None))
+
+    items: list[dict] = []
+    for i, (label, loc) in enumerate(attempts):
+        if i > 0:
+            add("assistant", f"No matches yet — retrying with **{label}**…")
+        with st.spinner(f"Resolving via Apify ({label})…"):
+            try:
+                items = resolve_candidates(apify, first, last, loc)
+            except ApifyError as exc:
+                add("assistant", f"⚠️ Apify error during resolve: {exc}")
+                return
+        if items:
+            if i > 0:
+                add("assistant", f"_(matched on fallback: {label})_")
+            break
+
     if not items:
-        add("assistant", "No candidates found. Try adding/relaxing the location or company.")
+        add("assistant", "No candidates found, even with name only. "
+                         "Check the spelling or try a different person.")
         return
     st.session_state.candidates = [candidate_view(it) for it in items]
     lines = ["I found these candidate(s):\n"]
@@ -328,23 +366,63 @@ def handle_confirm(prompt: str, apify: ApifyClient) -> None:
         return
     since = parse_since(None, DEFAULT_SINCE_DAYS)
     add("assistant",
-        f"Confirmed **{chosen['name']}**. Scraping posts + reposts since "
-        f"**{since.date().isoformat()}** (newest first)…")
+        f"Confirmed **{chosen['name']}**. Pulling full profile + career history, "
+        f"then posts + reposts since **{since.date().isoformat()}** (newest first)…")
+
+    clean_url = url.rstrip("/")
+    profile = None
+    with st.spinner("Fetching full profile via Apify…"):
+        try:
+            profile = scrape_profile(apify, clean_url)
+        except ApifyError as exc:
+            add("assistant", f"⚠️ Apify error fetching profile: {exc}")
     with st.spinner("Scraping activity via Apify…"):
         try:
-            rows = scrape_activity(apify, url.rstrip("/"), since)
+            rows = scrape_activity(apify, clean_url, since)
         except ApifyError as exc:
             add("assistant", f"⚠️ Apify error during scrape: {exc}")
             return
 
-    role = " | ".join(x for x in (chosen["headline"], chosen["company"],
-                                  chosen["location"]) if x)
-    md = render_markdown(chosen["name"], role, url, since, rows)
-    path = os.path.join(os.getcwd(), f"{slugify(chosen['name'])}.md")
+    # Prefer the live profile for name/role; fall back to the candidate card.
+    name = (fmt_field(profile or {}, "name", "fullName")
+            or " ".join(x for x in (fmt_field(profile or {}, "firstName"),
+                                    fmt_field(profile or {}, "lastName")) if x)
+            or chosen["name"])
+    role = (" | ".join(x for x in (
+                fmt_field(profile or {}, "headline", "occupation"),
+                fmt_field(profile or {}, "location.linkedinText",
+                          "location.parsed.text", "location"),
+            ) if x)
+            or " | ".join(x for x in (chosen["headline"], chosen["company"],
+                                      chosen["location"]) if x))
+    md = render_markdown(name, role, url, since, rows, profile=profile)
+    path = os.path.join(os.getcwd(), f"{slugify(name)}.md")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(md)
     st.session_state.report_md = md
     st.session_state.report_path = path
+
+    # Surface the captured profile / career history in chat.
+    if profile:
+        exp = profile.get("experience") or []
+        about = fmt_field(profile, "about", "summary")
+        prof_lines = [f"**Profile captured for {name}**"]
+        if role:
+            prof_lines.append(f"· {role}")
+        if exp:
+            roles_preview = "; ".join(
+                " — ".join(x for x in (fmt_field(e, "position", "title"),
+                                       fmt_field(e, "companyName", "company")) if x)
+                for e in exp[:5]
+            )
+            prof_lines.append(f"· **{len(exp)} roles** in career history: {roles_preview}"
+                              + (" …" if len(exp) > 5 else ""))
+        if about:
+            prof_lines.append("· About/bio captured ✓")
+        prof_lines.append("_(full career history + bio are at the top of the report)_")
+        add("assistant", "  \n".join(prof_lines))
+    else:
+        add("assistant", "_(couldn't fetch the full profile — report has activity only)_")
 
     if not rows:
         add("assistant", "No posts or reposts found in this window.")

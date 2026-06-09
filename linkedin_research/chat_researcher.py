@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 
@@ -48,13 +48,14 @@ from research_person import (  # noqa: E402
     fmt_field,
     render_markdown,
     scrape_activity_tiered,
+    scrape_posts,
     slugify,
     split_name,
     titlecase,
 )
 
 QA_MODEL = "claude-sonnet-4-6"  # Claude Sonnet 4.6 for extraction + Q&A
-DEFAULT_SINCE_DAYS = 60
+DEFAULT_SINCE_DAYS = 180        # initial window = 6 months
 MAX_CANDIDATES = 5
 MAX_POSTS = 40
 SESSIONS_DIRNAME = "sessions"
@@ -113,6 +114,10 @@ def save_session() -> None:
         "created_at": ss.get("created_at") or _now_iso(),
         "messages": ss.get("messages", []),
         "report_md": ss.get("report_md", ""),
+        # Context needed to re-scrape on demand in Phase 2 (also for loaded sessions).
+        "profile_url": ss.get("profile_url", ""),
+        "role": ss.get("role", ""),
+        "profile": ss.get("profile"),
     }
     try:
         path = os.path.join(sessions_dir(), f"{slug}.json")
@@ -174,6 +179,10 @@ def load_session(slug: str) -> None:
     ss.report_path = ""
     ss.person_name = d.get("person_name", "")
     ss.created_at = d.get("created_at", _now_iso())
+    ss.profile_url = d.get("profile_url", "")
+    ss.role = d.get("role", "")
+    ss.profile = d.get("profile")
+    ss.qa_messages = []
     ss.slug = slug
     ss.phase = "qa"
     ss.candidates = []
@@ -184,7 +193,8 @@ def new_session() -> None:
     """Clear the main chat for a fresh search. Sidebar history is on disk, so
     it survives untouched."""
     for k in ("messages", "phase", "candidates", "query", "report_md",
-              "report_path", "person_name", "created_at", "slug", "pending_delete"):
+              "report_path", "person_name", "created_at", "slug", "pending_delete",
+              "profile_url", "role", "profile", "qa_messages"):
         st.session_state.pop(k, None)
     init_state()
 
@@ -561,24 +571,208 @@ def report_download():
 
 
 # --------------------------------------------------------------------------- #
-# Q&A
+# Q&A — agentic, with an on-demand re-scrape tool
 # --------------------------------------------------------------------------- #
-def answer_question(client, question: str, markdown_ctx: str):
-    """Stream an answer using ONLY the scraped markdown as context."""
-    system = (
-        "You are a research assistant. Answer the user's question about this "
-        "person using ONLY the LinkedIn report below as your source. If the "
-        "answer isn't in the report, say so plainly. Be concise and specific; "
-        "cite dates where useful.\n\n"
-        "=== SCRAPED REPORT ===\n" + (markdown_ctx or "(no report available)")
+SCRAPE_TOOL = {
+    "name": "scrape_posts",
+    "description": (
+        "Re-run the LinkedIn posts/reposts scraper (Apify) for the ALREADY-"
+        "CONFIRMED person over a lookback window, returning fresh posts newest "
+        "first. Use this whenever the user asks to scrape, scrape more, refresh, "
+        "re-run, or fetch posts for a period such as 'the last 6 months', 'the "
+        "last year', or 'apify scrape'. Do NOT use it for ordinary questions "
+        "that the existing report already answers."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "months": {
+                "type": "integer",
+                "description": "Lookback window in months (e.g. 6, 12, 24). Default 6.",
+            },
+        },
+        "required": ["months"],
+    },
+}
+
+_WORDNUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+            "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12, "a": 1}
+
+
+def parse_months(text: str, default: int = 6) -> int:
+    """Pull a lookback window (in months) out of a free-text message."""
+    t = text.lower()
+    m = re.search(r"(\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+                  r"twelve|a)\s*(year|yr|month|mo)", t)
+    if m:
+        num = m.group(1)
+        n = int(num) if num.isdigit() else _WORDNUM.get(num, 1)
+        months = n * 12 if m.group(2).startswith(("year", "yr")) else n
+        return max(1, min(24, months))
+    if "year" in t:
+        return 12
+    return default
+
+
+def _tool_months(tool_input: dict, prompt: str) -> int:
+    m = tool_input.get("months") if isinstance(tool_input, dict) else None
+    if isinstance(m, (int, float)) and m > 0:
+        return max(1, min(24, int(m)))
+    return parse_months(prompt)
+
+
+def qa_system(report_md: str, person_name: str) -> str:
+    return (
+        f"You are a research assistant investigating {person_name}'s public "
+        "LinkedIn activity.\n"
+        "You have a tool, scrape_posts(months), that re-runs the LinkedIn posts "
+        "scraper for THIS already-confirmed person over a lookback window (in "
+        "months) and returns fresh posts.\n"
+        "- Call scrape_posts when the user asks to scrape, scrape more, refresh, "
+        "re-run, or fetch posts for a period (e.g. 'scrape the last 6 months', "
+        "'get the last year', 'apify scrape').\n"
+        "- For ordinary questions about the person, answer ONLY from the report "
+        "below. If the answer isn't there, say so plainly. Be concise and "
+        "specific; cite dates where useful.\n\n"
+        "=== CURRENT REPORT ===\n" + (report_md or "(no report yet)")
     )
-    with client.messages.stream(
-        model=QA_MODEL,
-        max_tokens=1024,
-        system=system,
-        messages=[{"role": "user", "content": question}],
-    ) as stream:
-        yield from stream.text_stream
+
+
+def posts_brief(rows, note: str, months: int) -> str:
+    """Compact text of the freshly scraped posts to feed back to the model."""
+    if not rows:
+        return note
+    lines = [note, ""]
+    for dt, it in rows[:30]:
+        d = dt.date().isoformat() if dt else "date n/a"
+        txt = _text(it).strip().replace("\n", " ")
+        if len(txt) > 400:
+            txt = txt[:400] + "…"
+        lines.append(f"[{d}] ({_item_type(it)}) {txt} — engagement: {_engagement(it)}")
+    return "\n".join(lines)
+
+
+def rescrape_and_report(apify: ApifyClient, months: int):
+    """Re-scrape the confirmed profile over `months`, show the posts in chat,
+    and refresh the report (markdown + download + session JSON)."""
+    ss = st.session_state
+    url = ss.get("profile_url")
+    since = datetime.now(timezone.utc) - timedelta(days=months * 30)
+    with st.spinner(f"Re-scraping the last {months} months via Apify…"):
+        try:
+            rows = scrape_posts(apify, url, since, MAX_POSTS)
+        except ApifyError as exc:
+            add("assistant", f"⚠️ Apify error during re-scrape: {exc}")
+            return [], f"Re-scrape failed: {exc}"
+
+    if rows:
+        note = f"Activity found: showing posts from the last {months} months."
+    else:
+        note = (f"No posts or reposts found in the last {months} months. "
+                "Profile and career history are unchanged.")
+
+    # Rebuild the report with the new window; keep profile/role/name.
+    md = render_markdown(ss.get("person_name") or "report", ss.get("role", ""),
+                         url, since, rows, profile=ss.get("profile"),
+                         window_note=note)
+    ss.report_md = md
+    save_session()
+
+    # Present the new posts in chat, newest first (same format as the original).
+    add("assistant", f"**{note}**")
+    for dt, it in rows:
+        date_str = dt.date().isoformat() if dt else "date n/a"
+        add("assistant",
+            f"**{date_str}** · _{_item_type(it)}_\n\n{_text(it).strip()}\n\n"
+            f"**Engagement:** {_engagement(it)}  \n"
+            f"**URL:** {_url(it) or 'n/a'}")
+    counts: dict[str, int] = {}
+    for _, it in rows:
+        counts[_item_type(it)] = counts.get(_item_type(it), 0) + 1
+    summary = ", ".join(f"{v} {k}" for k, v in counts.items())
+    add("assistant",
+        f"**Updated report — {len(rows)} item(s)** ({summary or 'none'}) over the "
+        f"last {months} months. Download button above is refreshed.")
+    return rows, note
+
+
+def run_agentic_qa(prompt: str, apify, ai, force_tool: bool = False) -> None:
+    """One Phase-2 turn: the model answers from the report, or calls scrape_posts."""
+    ss = st.session_state
+    url = ss.get("profile_url")
+    can_scrape = bool(apify and url)
+    tools = [SCRAPE_TOOL] if can_scrape else []
+    system = qa_system(ss.get("report_md", ""), ss.get("person_name") or "this person")
+
+    msgs = list(ss.get("qa_messages", []))
+    msgs.append({"role": "user", "content": prompt})
+    tool_choice = ({"type": "tool", "name": "scrape_posts"}
+                   if (force_tool and can_scrape) else {"type": "auto"})
+
+    final_text = ""
+    for _ in range(4):  # cap tool iterations
+        kwargs = dict(model=QA_MODEL, max_tokens=1200, system=system, messages=msgs)
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = tool_choice
+        try:
+            resp = ai.messages.create(**kwargs)
+        except Exception as exc:
+            add("assistant", f"⚠️ Q&A error: {exc}")
+            return
+
+        if resp.stop_reason == "tool_use":
+            msgs.append({"role": "assistant", "content": resp.content})
+            results = []
+            for block in resp.content:
+                if getattr(block, "type", None) == "tool_use" and block.name == "scrape_posts":
+                    months = _tool_months(block.input, prompt)
+                    rows, note = rescrape_and_report(apify, months)
+                    results.append({"type": "tool_result", "tool_use_id": block.id,
+                                    "content": posts_brief(rows, note, months)})
+            msgs.append({"role": "user", "content": results})
+            tool_choice = {"type": "auto"}  # let the model wrap up after scraping
+            continue
+
+        final_text = "".join(b.text for b in resp.content
+                             if getattr(b, "type", None) == "text").strip()
+        break
+
+    if final_text:
+        add("assistant", final_text)
+
+    # Keep a lightweight (text-only) history for context on the next turn.
+    hist = list(ss.get("qa_messages", []))
+    hist.append({"role": "user", "content": prompt})
+    if final_text:
+        hist.append({"role": "assistant", "content": final_text})
+    ss.qa_messages = hist[-12:]
+
+
+def handle_qa(prompt: str, apify, ai) -> None:
+    forced = any(k in prompt.lower() for k in ("scrape", "apify"))
+    has_ctx = bool(apify and st.session_state.get("profile_url"))
+
+    if ai is None:
+        # No LLM: still honour an explicit scrape request deterministically.
+        if forced and has_ctx:
+            months = parse_months(prompt)
+            rescrape_and_report(apify, months)
+            add("assistant", "_(Add `ANTHROPIC_API_KEY` for conversational Q&A.)_")
+        elif forced:
+            add("assistant", "I can't re-scrape — no Apify token or confirmed "
+                             "profile in this session.")
+        else:
+            add("assistant", "Q&A needs `ANTHROPIC_API_KEY`. Add it to secrets and reload.")
+        return
+
+    if forced and not has_ctx:
+        add("assistant", "I can't re-scrape (no Apify token or confirmed profile "
+                         "here), but I can still answer from the existing report.")
+        run_agentic_qa(prompt, apify, ai, force_tool=False)
+        return
+
+    run_agentic_qa(prompt, apify, ai, force_tool=forced)
 
 
 # --------------------------------------------------------------------------- #
@@ -596,6 +790,10 @@ def init_state() -> None:
     ss.setdefault("created_at", "")
     ss.setdefault("slug", None)
     ss.setdefault("pending_delete", None)
+    ss.setdefault("profile_url", "")
+    ss.setdefault("role", "")
+    ss.setdefault("profile", None)
+    ss.setdefault("qa_messages", [])
     if not ss.messages:
         ss.messages.append(
             {"role": "assistant", "content": GREETING, "timestamp": _now_iso()})
@@ -756,7 +954,7 @@ def handle_confirm(prompt: str, apify: ApifyClient, ai) -> None:
         return
     add("assistant",
         f"Confirmed **{chosen['name']}**. Pulling full profile + career history, "
-        f"then scanning for posts (last 2 months, widening if empty)…")
+        f"then scanning for posts (last 6 months, widening if empty)…")
 
     clean_url = url.rstrip("/")
     profile = None
@@ -793,6 +991,11 @@ def handle_confirm(prompt: str, apify: ApifyClient, ai) -> None:
     st.session_state.report_path = ""
     # Use the confirmed display name for the sidebar going forward.
     st.session_state.person_name = name
+    # Context for agentic Phase 2 re-scraping.
+    st.session_state.profile_url = clean_url
+    st.session_state.role = role
+    st.session_state.profile = profile
+    st.session_state.qa_messages = []
     save_session()
 
     if profile:
@@ -930,17 +1133,8 @@ def main() -> None:
 
     if phase == "qa":
         add("user", prompt)
-        if ai is None:
-            add("assistant", "Q&A needs `ANTHROPIC_API_KEY`. Add it to secrets and reload.")
-        else:
-            with st.chat_message("assistant"):
-                try:
-                    answer = st.write_stream(
-                        answer_question(ai, prompt, st.session_state.report_md))
-                except Exception as exc:
-                    answer = f"⚠️ Q&A error: {exc}"
-                    st.markdown(answer)
-            add("assistant", answer)
+        handle_qa(prompt, apify, ai)
+        st.rerun()
         return
 
     add("user", prompt)

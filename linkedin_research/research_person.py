@@ -156,13 +156,12 @@ def parse_item_date(item: dict) -> datetime | None:
 # --------------------------------------------------------------------------- #
 # Posts scraping with tiered time-window fallback
 # --------------------------------------------------------------------------- #
-POST_WINDOWS = [60, 180, 365, 730]
+POST_WINDOWS = [180, 365, 730]   # default starts at 6 months, then widens
 WINDOW_LABEL = {60: "last 2 months", 180: "last 6 months",
                 365: "last 1 year", 730: "last 2 years"}
 # Messages shown when a window returns nothing and we widen to the next.
 EXPAND_MSG = [
-    "No activity in the last 2 months. Expanding search to 6 months...",
-    "Nothing in 6 months. Trying 1 year...",
+    "No activity in the last 6 months. Expanding search to 1 year...",
     "Nothing in 1 year. Trying 2 years...",
 ]
 NO_ACTIVITY_MSG = ("No posts or reposts found in the last 2 years. Profile and "
@@ -334,7 +333,7 @@ def cmd_scrape(args: argparse.Namespace, client: ApifyClient) -> None:
     print(f"Actor : {posts_actor.human_name}")
     print(f"        {posts_actor.notes}")
 
-    if args.since or args.days != 60:
+    if args.since or args.days != 180:
         # Explicit window requested -> single attempt, no fallback ladder.
         since = parse_since(args.since, args.days)
         print(f"Pull  : posts/reposts since {since.date().isoformat()}.\n")
@@ -343,8 +342,8 @@ def cmd_scrape(args: argparse.Namespace, client: ApifyClient) -> None:
                 if rows else
                 f"No posts or reposts found since {since.date().isoformat()}.")
     else:
-        # Default flow: 2 months, expanding to 6 months, 1 year, then 2 years.
-        print(f"Pull  : posts/reposts, starting at 2 months and widening "
+        # Default flow: 6 months, expanding to 1 year, then 2 years.
+        print(f"Pull  : posts/reposts, starting at 6 months and widening "
               f"if empty.\n")
         rows, used_days, since = scrape_activity_tiered(
             client, url, args.max_posts, on_message=print)
@@ -544,8 +543,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--confirm", metavar="PROFILE_URL",
                    help="Confirmed LinkedIn profile URL -> scrape activity (Phase 2).")
     p.add_argument("--since", help="Start date YYYY-MM-DD (default: --days back).")
-    p.add_argument("--days", type=int, default=60,
-                   help="Lookback window if --since omitted (default 60).")
+    p.add_argument("--days", type=int, default=180,
+                   help="Lookback window if --since omitted (default 180 = 6 months).")
     p.add_argument("--max-posts", type=int, default=40,
                    help="Cap on posts/reposts to pull (default 40).")
     p.add_argument("--max-candidates", type=int, default=5,

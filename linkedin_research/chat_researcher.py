@@ -187,6 +187,7 @@ def load_session(slug: str) -> None:
     ss.phase = "qa"
     ss.candidates = []
     ss.query = {}
+    ss.download_after_idx = -1  # inline button position unknown for loaded sessions
 
 
 def new_session() -> None:
@@ -194,7 +195,7 @@ def new_session() -> None:
     it survives untouched."""
     for k in ("messages", "phase", "candidates", "query", "report_md",
               "report_path", "person_name", "created_at", "slug", "pending_delete",
-              "profile_url", "role", "profile", "qa_messages"):
+              "profile_url", "role", "profile", "qa_messages", "download_after_idx"):
         st.session_state.pop(k, None)
     init_state()
 
@@ -324,7 +325,27 @@ def add(role: str, content: str) -> None:
     save_session()
 
 
-def render_message(role: str, content: str) -> None:
+def render_message(role: str, content) -> None:
+    # Content should always be a plain string (written via add()), but if an
+    # Anthropic SDK content-block list leaks in, extract only text parts and
+    # drop any tool_use / tool_result blocks so they never appear in the UI.
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            btype = (block.get("type") if isinstance(block, dict)
+                     else getattr(block, "type", None))
+            if btype in ("tool_use", "tool_result"):
+                continue
+            text = (block.get("text", "") if isinstance(block, dict)
+                    else getattr(block, "text", ""))
+            if text:
+                parts.append(str(text))
+        content = "\n".join(parts)
+    if not isinstance(content, str):
+        content = str(content)
+    content = content.strip()
+    if not content:
+        return
     with st.chat_message(role):
         if role == "user":
             st.markdown('<span class="cr-user"></span>', unsafe_allow_html=True)
@@ -691,8 +712,10 @@ def rescrape_and_report(apify: ApifyClient, months: int):
         counts[_item_type(it)] = counts.get(_item_type(it), 0) + 1
     summary = ", ".join(f"{v} {k}" for k, v in counts.items())
     add("assistant",
-        f"**Updated report — {len(rows)} item(s)** ({summary or 'none'}) over the "
-        f"last {months} months. Download button above is refreshed.")
+        f"**Updated report — {len(rows)} item(s)** ({summary or 'none'}) "
+        f"over the last {months} months.")
+    # Mark this message as the anchor for the inline download button.
+    st.session_state.download_after_idx = len(st.session_state.messages) - 1
     return rows, note
 
 
@@ -794,6 +817,7 @@ def init_state() -> None:
     ss.setdefault("role", "")
     ss.setdefault("profile", None)
     ss.setdefault("qa_messages", [])
+    ss.setdefault("download_after_idx", -1)
     if not ss.messages:
         ss.messages.append(
             {"role": "assistant", "content": GREETING, "timestamp": _now_iso()})
@@ -1032,7 +1056,8 @@ def handle_confirm(prompt: str, apify: ApifyClient, ai) -> None:
         counts[_item_type(it)] = counts.get(_item_type(it), 0) + 1
     summary = ", ".join(f"{v} {k}" for k, v in counts.items())
     add("assistant", f"**Done — {len(rows)} item(s)** ({summary or 'none'}).")
-    add("assistant", "📄 Report ready — use the **Download report** button above.")
+    # Mark this message as the anchor for the inline download button.
+    st.session_state.download_after_idx = len(st.session_state.messages) - 1
     add("assistant",
         "You can now ask me anything about this person — e.g. _what has she "
         "been posting about_, _summarise her career_, _any recurring themes_.")
@@ -1100,15 +1125,22 @@ def main() -> None:
     init_state()
     render_sidebar()
 
-    # Download button for the report (after a scrape, or on a loaded session).
+    # Sidebar download button (always visible when report exists).
     if st.session_state.report_md:
-        data, file_name, mime, label = report_download()
-        st.download_button(label, data=data, file_name=file_name, mime=mime,
-                           key="dl_report")
+        with st.sidebar:
+            data, file_name, mime, label = report_download()
+            st.download_button(label, data=data, file_name=file_name, mime=mime,
+                               key="dl_sidebar")
 
-    # Replay history
-    for m in st.session_state.messages:
+    # Replay history; inject the inline download button right after the scrape
+    # summary message so it sits in the chat flow, not just the sidebar.
+    dl_idx = st.session_state.get("download_after_idx", -1)
+    for i, m in enumerate(st.session_state.messages):
         render_message(m["role"], m["content"])
+        if i == dl_idx and st.session_state.report_md:
+            dl_data, dl_file, dl_mime, dl_label = report_download()
+            st.download_button(dl_label, data=dl_data, file_name=dl_file,
+                               mime=dl_mime, key="dl_inline")
 
     apify_token = os.environ.get("APIFY_TOKEN", "").strip()
     placeholder = ("Ask about this person…" if st.session_state.phase == "qa"

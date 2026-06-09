@@ -184,9 +184,20 @@ def new_session() -> None:
     """Clear the main chat for a fresh search. Sidebar history is on disk, so
     it survives untouched."""
     for k in ("messages", "phase", "candidates", "query", "report_md",
-              "report_path", "person_name", "created_at", "slug"):
+              "report_path", "person_name", "created_at", "slug", "pending_delete"):
         st.session_state.pop(k, None)
     init_state()
+
+
+def delete_session(slug: str) -> None:
+    """Delete only the session JSON. The .md report file (if any) is left
+    untouched on disk."""
+    try:
+        os.remove(os.path.join(sessions_dir(), f"{slug}.json"))
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -584,36 +595,35 @@ def init_state() -> None:
     ss.setdefault("person_name", "")
     ss.setdefault("created_at", "")
     ss.setdefault("slug", None)
+    ss.setdefault("pending_delete", None)
     if not ss.messages:
         ss.messages.append(
             {"role": "assistant", "content": GREETING, "timestamp": _now_iso()})
 
 
-def handle_query(prompt: str, apify: ApifyClient, ai) -> None:
-    q = extract_query(prompt, ai)
-    if not q.get("name"):
-        add("assistant", "I couldn't spot a name there. Try `Name, Company, Location`.")
-        return
+def _normalise_query(q: dict) -> dict:
+    return {
+        "name": titlecase(q.get("name", "")),
+        "current_company": titlecase(q.get("current_company", "")),
+        "past_company": titlecase(q.get("past_company", "")),
+        "location": titlecase(q.get("location", "")),
+    }
 
-    # Normalise name/company/location to title case before the API call.
-    q["name"] = titlecase(q.get("name", ""))
-    q["current_company"] = titlecase(q.get("current_company", ""))
-    q["past_company"] = titlecase(q.get("past_company", ""))
-    q["location"] = titlecase(q.get("location", ""))
-    st.session_state.query = q
 
-    # Register the session now that the person's name is known.
-    register_session(q["name"])
+def _search_summary(q: dict, prefix: str = "Searching for") -> str:
+    loc = q.get("location")
+    return (f"{prefix} **{q['name']}**"
+            + (f" · {q['current_company']}" if q.get("current_company") else "")
+            + (f" · {loc}" if loc else "")
+            + "  \n_(cheap search — no activity scraped yet)_")
 
-    first, last = split_name(q["name"])
+
+def run_resolution(q: dict, apify: ApifyClient) -> None:
+    """Resolve candidates for q and show them. Always stays in await_confirm so
+    the user can confirm, reject, or refine — the chat never dead-ends."""
+    first, last = split_name(q.get("name", ""))
     location = q.get("location") or None
-    summary = (f"Searching for **{q['name']}**"
-               + (f" · {q['current_company']}" if q.get("current_company") else "")
-               + (f" · {location}" if location else "")
-               + "  \n_(cheap search — no activity scraped yet)_")
-    add("assistant", summary)
 
-    # Fallback ladder: name+location, then name only (deduped).
     attempts: list[tuple[str, str | None]] = []
     if location:
         attempts.append(("name + location", location))
@@ -628,16 +638,22 @@ def handle_query(prompt: str, apify: ApifyClient, ai) -> None:
                 items = resolve_candidates(apify, first, last, loc)
             except ApifyError as exc:
                 add("assistant", f"⚠️ Apify error during resolve: {exc}")
+                st.session_state.phase = "await_confirm"
                 return
         if items:
             if i > 0:
                 add("assistant", f"_(matched on fallback: {label})_")
             break
 
+    st.session_state.phase = "await_confirm"  # stay searching until confirmed
     if not items:
-        add("assistant", "No candidates found, even with name only. "
-                         "Check the spelling or try a different person.")
+        st.session_state.candidates = []
+        add("assistant",
+            "I couldn't find anyone with those details. Tell me more to narrow "
+            "it down — a different **location**, **company**, **job title**, or a "
+            "corrected **name** — and I'll search again.")
         return
+
     st.session_state.candidates = [candidate_view(it) for it in items]
     lines = ["I found these candidate(s):\n"]
     for i, c in enumerate(st.session_state.candidates, 1):
@@ -648,29 +664,91 @@ def handle_query(prompt: str, apify: ApifyClient, ai) -> None:
             + (f"· {c['location']}  \n" if c['location'] else "")
             + (f"· {c['url']}" if c['url'] else "")
         )
-    lines.append("\nReply **yes** (or **1**) to confirm the top match, or a number to pick another.")
+    lines.append("\nReply **yes** or a **number** to confirm — or, if none are "
+                 "right, tell me what's different (location, company, job title, "
+                 "corrected name) and I'll search again.")
     add("assistant", "\n".join(lines))
-    st.session_state.phase = "await_confirm"
 
 
-def handle_confirm(prompt: str, apify: ApifyClient) -> None:
+def handle_query(prompt: str, apify: ApifyClient, ai) -> None:
+    q = extract_query(prompt, ai)
+    if not q.get("name"):
+        add("assistant", "I couldn't spot a name there. Try `Name, Company, Location`.")
+        return
+    q = _normalise_query(q)
+    st.session_state.query = q
+    register_session(q["name"])  # session known once we have a name
+    add("assistant", _search_summary(q))
+    run_resolution(q, apify)
+
+
+def handle_research_update(prompt: str, apify: ApifyClient, ai) -> None:
+    """The user rejected the candidates and/or gave new details. Merge them with
+    the original search params and resolve again."""
+    base = dict(st.session_state.query or {})
+    new = _normalise_query(extract_query(prompt, ai))
+    merged = dict(base)
+    changed = False
+
+    # Only override the name when a full (2+ word) name is supplied, so a bare
+    # first name in a correction ("no, Sara works at…") doesn't drop the surname.
+    nn = new.get("name", "").strip()
+    if nn and len(nn.split()) >= 2 and nn.lower() != base.get("name", "").lower():
+        merged["name"] = nn
+        changed = True
+    for k in ("location", "current_company", "past_company"):
+        v = new.get(k, "").strip()
+        if v and v.lower() != base.get(k, "").lower():
+            merged[k] = v
+            changed = True
+
+    if not changed:
+        add("assistant",
+            "Okay — not those. Give me a bit more to go on (a different "
+            "**location**, **company**, **job title**, or a corrected **name**) "
+            "and I'll run a fresh search.")
+        st.session_state.phase = "await_confirm"
+        return
+
+    st.session_state.query = merged
+    add("assistant", _search_summary(merged, prefix="Re-searching with updated details:"))
+    run_resolution(merged, apify)
+
+
+def _confirm_index(choice: str, n: int):
+    """Return a 0-based candidate index for a confirmation, 'oob' for an
+    out-of-range number, or None if the message isn't a confirmation."""
+    c = choice.strip().lower().rstrip("!. ")
+    if c.isdigit():
+        v = int(c)
+        return v - 1 if 1 <= v <= n else "oob"
+    m = re.fullmatch(r"(?:number|option|candidate|no\.?)\s*(\d+)", c)
+    if m:
+        v = int(m.group(1))
+        return v - 1 if 1 <= v <= n else "oob"
+    affirm = {"yes", "y", "yep", "yeah", "yup", "confirm", "confirmed", "correct",
+              "ok", "okay", "sure", "that's right", "thats right", "first",
+              "the first", "first one", "the first one", "number one", "yes please"}
+    if c in affirm or c.startswith(("yes ", "yep ", "yeah ", "confirm", "correct")):
+        return 0
+    return None
+
+
+def handle_confirm(prompt: str, apify: ApifyClient, ai) -> None:
     cands = st.session_state.candidates
-    choice = prompt.strip().lower()
-    if choice in ("yes", "y", "confirm", "1", "first"):
-        idx = 0
-    elif choice.isdigit():
-        idx = int(choice) - 1
-    elif choice in ("no", "n", "none", "cancel"):
-        add("assistant", "Okay — give me another name, company, and location.")
-        st.session_state.phase = "await_query"
+    res = _confirm_index(prompt, len(cands)) if cands else None
+
+    if res == "oob":
+        add("assistant",
+            f"There's no candidate {prompt.strip()} — pick 1–{len(cands)}, or "
+            "tell me what's different and I'll search again.")
         return
-    else:
-        add("assistant", "Please reply **yes** or a candidate **number** (e.g. `2`).")
-        return
-    if idx < 0 or idx >= len(cands):
-        add("assistant", f"There's no candidate {idx + 1}. Pick 1–{len(cands)}.")
+    if res is None:
+        # Not a confirmation -> rejection and/or updated details -> re-search.
+        handle_research_update(prompt, apify, ai)
         return
 
+    idx = res
     chosen = cands[idx]
     url = chosen["url"]
     if not url:
@@ -778,13 +856,38 @@ def render_sidebar() -> None:
         if not sessions:
             st.caption("No saved sessions yet.")
         for s in sessions:
-            active = s["slug"] == ss.get("slug")
+            slug = s["slug"]
+            active = slug == ss.get("slug")
             icon = "📄" if s["has_report"] else "💬"
             label = f"{icon}  {s['person_name']}  ·  {s['date_label']}"
-            if st.button(label, key=f"sess_{s['slug']}", use_container_width=True,
-                         type="primary" if active else "secondary"):
-                load_session(s["slug"])
-                st.rerun()
+            open_col, del_col = st.columns([0.82, 0.18])
+            with open_col:
+                if st.button(label, key=f"open_{slug}", use_container_width=True,
+                             type="primary" if active else "secondary"):
+                    load_session(slug)
+                    ss.pending_delete = None
+                    st.rerun()
+            with del_col:
+                if st.button("🗑", key=f"del_{slug}", use_container_width=True,
+                             help="Delete this session"):
+                    ss.pending_delete = slug
+                    st.rerun()
+            if ss.get("pending_delete") == slug:
+                st.caption(f"Delete “{s['person_name']}”? The report file is kept.")
+                yes_col, no_col = st.columns(2)
+                with yes_col:
+                    if st.button("✅ Delete", key=f"delyes_{slug}",
+                                 use_container_width=True):
+                        delete_session(slug)
+                        ss.pending_delete = None
+                        if active:
+                            new_session()  # clear the open chat if we deleted it
+                        st.rerun()
+                with no_col:
+                    if st.button("✖ Cancel", key=f"delno_{slug}",
+                                 use_container_width=True):
+                        ss.pending_delete = None
+                        st.rerun()
 
 
 def main() -> None:
@@ -844,7 +947,7 @@ def main() -> None:
     if phase == "await_query":
         handle_query(prompt, apify, ai)
     elif phase == "await_confirm":
-        handle_confirm(prompt, apify)
+        handle_confirm(prompt, apify, ai)
     st.rerun()
 
 

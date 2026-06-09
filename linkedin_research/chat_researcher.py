@@ -318,17 +318,19 @@ def candidate_view(it: dict) -> dict:
 # --------------------------------------------------------------------------- #
 # Chat helpers
 # --------------------------------------------------------------------------- #
-def add(role: str, content: str) -> None:
-    """Append a message AND persist the session (saved after every message)."""
-    st.session_state.messages.append(
-        {"role": role, "content": content, "timestamp": _now_iso()})
-    save_session()
+def _blocks_to_text(content) -> str:
+    """Normalise any content value to a plain display string.
 
+    The Anthropic SDK returns response content as a list of typed blocks
+    (TextBlock, ToolUseBlock, ToolResultBlock, etc.).  Only TextBlock text
+    should ever be shown to the user; tool_use / tool_result blocks are
+    internal API machinery and must be stripped before display.
 
-def render_message(role: str, content) -> None:
-    # Content should always be a plain string (written via add()), but if an
-    # Anthropic SDK content-block list leaks in, extract only text parts and
-    # drop any tool_use / tool_result blocks so they never appear in the UI.
+    This function is called at two independent layers:
+      1. add()          — at the point content enters st.session_state.messages
+      2. render_message() — at the point a message is rendered to the UI
+    so blocks cannot reach the screen even if one layer is bypassed.
+    """
     if isinstance(content, list):
         parts: list[str] = []
         for block in content:
@@ -340,16 +342,38 @@ def render_message(role: str, content) -> None:
                     else getattr(block, "text", ""))
             if text:
                 parts.append(str(text))
-        content = "\n".join(parts)
+        return "\n".join(parts)
     if not isinstance(content, str):
-        content = str(content)
-    content = content.strip()
-    if not content:
+        return str(content)
+    return content
+
+
+def add(role: str, content) -> None:
+    """Append a message AND persist the session (saved after every message).
+
+    content is normalised to a plain string here so raw SDK content-block
+    objects can never be stored in st.session_state.messages regardless of
+    how this function is called.
+    """
+    text = _blocks_to_text(content).strip()
+    if not text:
+        return  # don't store empty bubbles
+    st.session_state.messages.append(
+        {"role": role, "content": text, "timestamp": _now_iso()})
+    save_session()
+
+
+def render_message(role: str, content) -> None:
+    """Render one chat message.  Uses _blocks_to_text as a second independent
+    guard so tool_use / tool_result blocks cannot appear even if a non-string
+    value survived the add() layer (e.g. loaded from a corrupted session file)."""
+    text = _blocks_to_text(content).strip()
+    if not text:
         return
     with st.chat_message(role):
         if role == "user":
             st.markdown('<span class="cr-user"></span>', unsafe_allow_html=True)
-        st.markdown(content)
+        st.markdown(text)
 
 
 WHATSAPP_CSS = """
@@ -745,6 +769,13 @@ def run_agentic_qa(prompt: str, apify, ai, force_tool: bool = False) -> None:
             return
 
         if resp.stop_reason == "tool_use":
+            # Pass the full SDK content list back to the API on the next turn.
+            # These objects live only in `msgs` (a local variable) and are
+            # NEVER written to st.session_state.messages or qa_messages.
+            # Any TextBlock present here is the model's pre-tool "thinking" text
+            # (e.g. "I'll scrape now…") — we intentionally suppress it from the
+            # UI; only the formatted post results from rescrape_and_report() and
+            # the model's final wrap-up text are shown to the user.
             msgs.append({"role": "assistant", "content": resp.content})
             results = []
             for block in resp.content:
@@ -753,18 +784,24 @@ def run_agentic_qa(prompt: str, apify, ai, force_tool: bool = False) -> None:
                     rows, note = rescrape_and_report(apify, months)
                     results.append({"type": "tool_result", "tool_use_id": block.id,
                                     "content": posts_brief(rows, note, months)})
+            # tool_result dicts (plain JSON) go back to the API.  Same rule:
+            # they stay in msgs only, never touch st.session_state.messages.
             msgs.append({"role": "user", "content": results})
             tool_choice = {"type": "auto"}  # let the model wrap up after scraping
             continue
 
-        final_text = "".join(b.text for b in resp.content
-                             if getattr(b, "type", None) == "text").strip()
+        # Non-tool_use path: extract only text blocks via _blocks_to_text so no
+        # stray tool_use / tool_result content can slip into final_text even if
+        # the model response is unexpectedly structured.
+        final_text = _blocks_to_text(resp.content).strip()
         break
 
     if final_text:
         add("assistant", final_text)
 
-    # Keep a lightweight (text-only) history for context on the next turn.
+    # qa_messages is rebuilt from ss.qa_messages (the previous turn's text-only
+    # history), NOT from `msgs`.  This guarantees qa_messages never contains SDK
+    # content-block objects, even across multiple tool-use iterations.
     hist = list(ss.get("qa_messages", []))
     hist.append({"role": "user", "content": prompt})
     if final_text:

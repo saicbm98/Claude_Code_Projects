@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tower Operations - Process Excellence and AI</title>
+<title>Operations at Tower - Process Excellence and AI</title>
 <style>
   :root {
     --bg: #f4f6f8;
@@ -15,9 +15,8 @@
     --green-bg: #e8f1ea;
     --green-edge: #c2dbc9;
     --green-ink: #2f5d43;
-    --green-accent: #3f7a57;
 
-    /* Band 2 - warm amber (live complexity) */
+    /* Band 2 - warm amber (role of AI) */
     --amber-bg: #fbf1e0;
     --amber-edge: #ecd6b0;
     --amber-ink: #7a571f;
@@ -27,7 +26,6 @@
     --slate-bg: #1f3247;
     --slate-bg-2: #25405b;
     --slate-card: #2c4a68;
-    --slate-card-hi: #335a7e;
     --slate-edge: #3f6488;
     --slate-ink: #eef4fa;
     --slate-soft: #b6cadd;
@@ -39,7 +37,7 @@
     --neutral-ink: #34404c;
     --neutral-accent: #56657a;
 
-    --radius: 14px;
+    --radius: 13px;
     --shadow: 0 1px 2px rgba(28,39,51,.06), 0 6px 18px rgba(28,39,51,.06);
     --shadow-lift: 0 4px 10px rgba(28,39,51,.10), 0 16px 40px rgba(28,39,51,.14);
     --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -54,41 +52,38 @@
     color: var(--ink);
     font-family: var(--font);
     -webkit-font-smoothing: antialiased;
-    line-height: 1.5;
+    line-height: 1.45;
   }
 
   .page {
-    max-width: 1140px;
+    max-width: 1180px;
     margin: 0 auto;
-    padding: 48px 28px 72px;
+    padding: 30px 26px 28px;
   }
 
   /* ---------- Header ---------- */
-  header.masthead {
-    margin-bottom: 34px;
-  }
+  header.masthead { margin-bottom: 18px; }
   .masthead h1 {
-    font-size: clamp(26px, 4vw, 40px);
+    font-size: clamp(22px, 3.2vw, 32px);
     font-weight: 650;
     letter-spacing: -0.02em;
-    margin: 0 0 10px;
+    margin: 0 0 6px;
     color: var(--ink);
   }
   .masthead .subtitle {
-    font-size: clamp(15px, 2vw, 18px);
+    font-size: clamp(14px, 1.8vw, 16.5px);
     color: var(--ink-soft);
-    max-width: 760px;
-    margin: 0 0 18px;
+    margin: 0 0 12px;
   }
   .hint {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
+    font-size: 12.5px;
     color: var(--ink-faint);
     background: #fff;
     border: 1px solid #e2e7ec;
-    padding: 6px 13px;
+    padding: 5px 12px;
     border-radius: 999px;
     box-shadow: var(--shadow);
   }
@@ -98,58 +93,76 @@
     display: inline-block;
   }
 
+  /* ---------- Top row: bands 1 + 2 side by side ---------- */
+  .top-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
   /* ---------- Bands ---------- */
   .band {
-    border-radius: 20px;
-    padding: 26px 26px 30px;
-    margin-bottom: 18px;
+    border-radius: 16px;
+    padding: 18px 18px 20px;
     box-shadow: var(--shadow);
     position: relative;
   }
   .band-label {
-    font-size: 12px;
+    font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.13em;
     font-weight: 650;
-    opacity: .8;
-    margin: 0 0 6px;
+    opacity: .85;
+    margin: 0 0 5px;
   }
   .band-heading {
-    font-size: clamp(18px, 2.4vw, 23px);
+    font-size: clamp(16px, 2vw, 19px);
     font-weight: 640;
     letter-spacing: -0.01em;
-    margin: 0 0 4px;
+    margin: 0;
   }
   .band-frame {
-    font-size: 14.5px;
-    margin: 8px 0 20px;
-    max-width: 820px;
+    font-size: 13px;
+    margin: 7px 0 14px;
   }
 
-  /* Band-specific colour */
-  .band-built  { background: var(--green-bg);   border: 1px solid var(--green-edge); }
+  .band-built  { background: var(--green-bg); border: 1px solid var(--green-edge); }
   .band-built  .band-label, .band-built .band-heading { color: var(--green-ink); }
 
-  .band-live   { background: var(--amber-bg);   border: 1px solid var(--amber-edge); }
+  .band-live   { background: var(--amber-bg); border: 1px solid var(--amber-edge); }
   .band-live   .band-label, .band-live .band-heading { color: var(--amber-ink); }
   .band-live   .band-frame { color: var(--amber-ink); }
 
-  .band-heart  {
+  .band-built .band-heading, .band-live .band-heading { margin-bottom: 12px; }
+
+  /* ---------- Heart band (full width, dominant) ---------- */
+  .band-heart {
     background: linear-gradient(160deg, var(--slate-bg) 0%, var(--slate-bg-2) 100%);
     border: 1px solid #16273a;
-    padding: 40px 30px 44px;
-    margin: 26px 0;
+    border-radius: 18px;
+    padding: 30px 28px 32px;
+    margin-bottom: 16px;
     box-shadow: 0 8px 22px rgba(20,35,52,.22), 0 22px 60px rgba(20,35,52,.26);
   }
   .band-heart .band-label  { color: var(--slate-accent); opacity: 1; }
-  .band-heart .band-heading { color: var(--slate-ink); font-size: clamp(20px, 2.9vw, 28px); }
-  .band-heart .band-frame  { color: var(--slate-soft); font-size: 15.5px; max-width: 860px; }
+  .band-heart .band-heading { color: var(--slate-ink); font-size: clamp(19px, 2.6vw, 26px); margin-bottom: 2px; }
+  .band-heart .heart-sub {
+    color: var(--slate-soft);
+    font-size: clamp(14px, 1.7vw, 16px);
+    font-weight: 500;
+    margin: 0 0 8px;
+  }
+  .band-heart .band-frame { color: var(--slate-soft); font-size: 14.5px; max-width: 900px; margin: 0 0 22px; }
 
-  .band-people { background: var(--neutral-bg); border: 1px solid var(--neutral-edge); }
+  /* ---------- Band 4 (compact strip) ---------- */
+  .band-people { background: var(--neutral-bg); border: 1px solid var(--neutral-edge); padding: 18px 18px 20px; }
   .band-people .band-label, .band-people .band-heading { color: var(--neutral-ink); }
+  .band-people .band-heading { margin-bottom: 12px; }
 
   /* ---------- Card grids ---------- */
-  .cards { display: grid; gap: 14px; }
+  .cards { display: grid; gap: 11px; }
+  .cards.stack  { grid-template-columns: 1fr; }
   .cards.cols-3 { grid-template-columns: repeat(3, 1fr); }
   .cards.cols-2 { grid-template-columns: repeat(2, 1fr); }
 
@@ -159,7 +172,7 @@
     background: #fff;
     border: 1px solid #e4e9ee;
     border-radius: var(--radius);
-    padding: 18px 18px 16px;
+    padding: 14px 15px 13px;
     cursor: pointer;
     transition: box-shadow .25s ease, transform .25s ease, border-color .25s ease;
     box-shadow: var(--shadow);
@@ -172,16 +185,16 @@
   .card:focus-visible { border-color: var(--slate-accent); }
 
   .card-title {
-    font-size: 16px;
+    font-size: 14.5px;
     font-weight: 630;
-    margin: 0 0 5px;
+    margin: 0 0 4px;
     letter-spacing: -0.005em;
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 8px;
   }
   .card-summary {
-    font-size: 13.5px;
+    font-size: 12.5px;
     color: var(--ink-soft);
     margin: 0;
   }
@@ -192,29 +205,36 @@
     max-height: 0;
     opacity: 0;
     transition: max-height .35s ease, opacity .3s ease, margin .35s ease;
-    font-size: 13.5px;
+    font-size: 12.8px;
     color: var(--ink-soft);
     margin-top: 0;
   }
   .card:hover .card-detail,
   .card:focus-within .card-detail,
   .card.open .card-detail {
-    max-height: 460px;
+    max-height: 520px;
     opacity: 1;
-    margin-top: 13px;
+    margin-top: 11px;
   }
   .card-detail .divider {
     height: 1px;
     background: #eaeef2;
-    margin: 0 0 12px;
+    margin: 0 0 10px;
   }
+  .card-detail ul {
+    margin: 0 0 9px;
+    padding-left: 17px;
+  }
+  .card-detail li { margin-bottom: 2px; }
+  .card-detail .agent { font-weight: 600; color: var(--ink); }
+  .card-detail .mine { font-style: italic; color: var(--ink-faint); }
 
-  /* heart cards styled dark */
+  /* heart cards styled dark, largest */
   .band-heart .card {
     background: var(--slate-card);
     border: 1px solid var(--slate-edge);
     box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 8px 22px rgba(0,0,0,.20);
-    padding: 22px 20px 20px;
+    padding: 20px 19px 18px;
   }
   .band-heart .card:hover,
   .band-heart .card:focus-visible,
@@ -223,99 +243,67 @@
     border-color: var(--slate-accent);
     box-shadow: 0 6px 16px rgba(0,0,0,.28), 0 20px 50px rgba(0,0,0,.30);
   }
-  .band-heart .card-title { color: var(--slate-ink); font-size: 17px; }
+  .band-heart .card-title { color: var(--slate-ink); font-size: 15.5px; }
   .band-heart .card-summary { color: var(--slate-soft); }
-  .band-heart .card-detail { color: #d2e1ef; }
+  .band-heart .card-detail { color: #d2e1ef; font-size: 13.3px; }
   .band-heart .card-detail .divider { background: rgba(255,255,255,.14); }
 
   /* numbered chips on heart cards */
   .num {
     flex: 0 0 auto;
-    width: 24px; height: 24px;
+    width: 23px; height: 23px;
     border-radius: 50%;
     background: rgba(111,179,232,.18);
     color: var(--slate-accent);
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 700;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    transform: translateY(2px);
   }
 
-  /* linking line under heart */
-  .heart-link {
-    margin: 22px 4px 0;
-    text-align: center;
-    color: var(--slate-soft);
-    font-size: 14px;
+  /* ---------- Gap marker (plain text label) ---------- */
+  .gap {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--amber-accent);
     font-style: italic;
   }
-
-  /* ---------- Open-question marker ---------- */
-  .openq {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    margin-top: 12px;
-    padding: 9px 11px;
-    border-radius: 9px;
-    background: rgba(176,126,42,.08);
-    border: 1px dashed rgba(176,126,42,.4);
-    font-size: 12.5px;
-    color: var(--amber-ink);
-    font-style: italic;
-  }
-  .openq .q {
-    flex: 0 0 auto;
-    width: 17px; height: 17px;
-    border-radius: 50%;
-    border: 1.5px solid currentColor;
-    font-size: 11px;
-    font-weight: 700;
+  .gap b {
     font-style: normal;
-    display: inline-flex; align-items: center; justify-content: center;
-    line-height: 1;
-    margin-top: 1px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    margin-right: 4px;
   }
-  /* open-q inside neutral band */
-  .band-people .openq {
-    background: rgba(86,101,122,.08);
-    border-color: rgba(86,101,122,.4);
-    color: var(--neutral-accent);
-  }
+  .band-people .gap { color: var(--neutral-accent); }
 
-  /* small connector flourish between bands */
-  .flow {
+  /* ---------- Footer ---------- */
+  .footer {
+    margin-top: 22px;
     text-align: center;
-    color: #c3ccd4;
-    font-size: 18px;
-    line-height: 1;
-    margin: -4px 0 14px;
-  }
-
-  /* ---------- Signature ---------- */
-  .signature {
-    margin-top: 34px;
-    text-align: right;
     font-size: 12.5px;
     color: var(--ink-faint);
     letter-spacing: 0.02em;
   }
-  .signature strong { color: var(--ink-soft); font-weight: 600; }
 
   /* ---------- Responsive ---------- */
-  @media (max-width: 760px) {
-    .cards.cols-3, .cards.cols-2 { grid-template-columns: 1fr; }
-    .page { padding: 32px 18px 56px; }
-    .band, .band-heart { padding: 22px 18px 26px; }
+  @media (max-width: 820px) {
+    .top-row { grid-template-columns: 1fr; }
+    .band-heart .cards.cols-3,
+    .band-people .cards.cols-2 { grid-template-columns: 1fr; }
+    .page { padding: 24px 16px 24px; }
+    .band-heart { padding: 24px 18px 26px; }
   }
 
   /* ---------- Print ---------- */
   @media print {
     body { background: #fff; }
     .hint { display: none; }
-    .card-detail { max-height: none !important; opacity: 1 !important; margin-top: 13px !important; }
-    .band, .band-heart, .card { box-shadow: none; }
+    .card-detail { max-height: none !important; opacity: 1 !important; margin-top: 11px !important; }
+    .band, .band-heart, .band-people, .card { box-shadow: none; }
     .band-heart { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
@@ -324,126 +312,129 @@
 <div class="page">
 
   <header class="masthead">
-    <h1>Tower Operations - Process Excellence and AI</h1>
-    <p class="subtitle">My thinking on where Tower's process excellence and AI journey could go next.</p>
+    <h1>Operations at Tower - Process Excellence and AI</h1>
+    <p class="subtitle">My thinking on Tower's process excellence and AI journey.</p>
     <span class="hint"><span class="dot"></span> Hover or tap any card for more.</span>
   </header>
 
-  <!-- ====================== BAND 1 - BUILT ====================== -->
-  <section class="band band-built">
-    <p class="band-label">What Tower has built</p>
-    <h2 class="band-heading">What's built and working</h2>
+  <!-- ============ TOP ROW: BAND 1 + BAND 2 ============ -->
+  <div class="top-row">
 
-    <div class="cards cols-3">
+    <!-- BAND 1 -->
+    <section class="band band-built">
+      <p class="band-label">What Tower has built</p>
+      <h2 class="band-heading">What's built and working</h2>
 
-      <div class="card" tabindex="0" role="button" aria-expanded="false">
-        <p class="card-title">AI in the contact centre</p>
-        <p class="card-summary">Three production agents already live and saving time at scale.</p>
-        <div class="card-detail">
-          <div class="divider"></div>
-          Three production agents - real-time knowledge surfacing, live transcription and summarisation, and automated profile updates - on Amazon Connect and Bedrock with Deloitte. Roughly 800,000 minutes saved in seven months, average handling time down, and growth absorbed with no new frontline headcount.
+      <div class="cards stack">
+
+        <div class="card" tabindex="0" role="button" aria-expanded="false">
+          <p class="card-title">The AI contact centre</p>
+          <p class="card-summary">Three production agents, live and saving time at scale.</p>
+          <div class="card-detail">
+            <div class="divider"></div>
+            <ul>
+              <li><span class="agent">Sal</span> - real-time knowledge surfacing</li>
+              <li><span class="agent">Bob</span> - live transcription and summarisation</li>
+              <li><span class="agent">Derek</span> - updates the summary into the CRM</li>
+            </ul>
+            Built on Amazon Connect and Bedrock with Deloitte. Around 800,000 minutes saved in seven months, average handling time down by 2 minutes 38 seconds, and 5% growth absorbed with no new frontline headcount.
+          </div>
         </div>
-      </div>
 
-      <div class="card" tabindex="0" role="button" aria-expanded="false">
-        <p class="card-title">Mature personalised underwriting</p>
-        <p class="card-summary">Standard personal lines largely automated through the rules engine.</p>
-        <div class="card-detail">
-          <div class="divider"></div>
-          Standard personal lines are largely automated through the rules engine. The underwriting role is increasingly shifting from individual case assessment toward risk appetite, rules, and portfolio governance.
+        <div class="card" tabindex="0" role="button" aria-expanded="false">
+          <p class="card-title">Digital-first underwriting</p>
+          <p class="card-summary">Standard personal lines largely automated through the rules engine.</p>
+          <div class="card-detail">
+            <div class="divider"></div>
+            Standard personal lines are largely automated through the rules engine. <span class="mine">(My thinking)</span> The underwriting role has increasingly shifted from individual case assessment toward setting risk appetite and rules, and portfolio governance.
+          </div>
         </div>
-      </div>
 
-      <div class="card" tabindex="0" role="button" aria-expanded="false">
-        <p class="card-title">Stable product set</p>
-        <p class="card-summary">Core personal lines mature; innovation sits in pricing and distribution.</p>
-        <div class="card-detail">
-          <div class="divider"></div>
-          Core personal lines products are mature and stable. The innovation sits at the pricing and distribution layer rather than in the core product.
+        <div class="card" tabindex="0" role="button" aria-expanded="false">
+          <p class="card-title">Stable product, innovation in pricing and distribution</p>
+          <p class="card-summary">Core personal lines stable; the innovation is in the climate pricing model and distribution.</p>
+          <div class="card-detail">
+            <div class="divider"></div>
+            Core personal lines products are stable. The innovation sits in the address-level climate pricing model, fed by specialist peril data (earthquake and flood from Moody's, sea surge from Haskoning, landslide from Swiss Re), and in distribution through APIs and partnerships, including Westpac from July 2026.
+          </div>
         </div>
+
       </div>
+    </section>
 
-    </div>
-  </section>
+    <!-- BAND 2 -->
+    <section class="band band-live">
+      <p class="band-label">The role of AI</p>
+      <h2 class="band-heading">AI and process excellence</h2>
+      <p class="band-frame">AI is a multiplier and works best as an assistant, taking the admin and the speed while the human handles the complexity.</p>
 
-  <div class="flow">↓</div>
+      <div class="cards stack">
 
-  <!-- ====================== BAND 2 - LIVE COMPLEXITY ====================== -->
-  <section class="band band-live">
-    <p class="band-label">Where the live complexity is</p>
-    <h2 class="band-heading">Lead with the problem, not the AI</h2>
-    <p class="band-frame">AI is a multiplier. It amplifies whatever it touches - a strong process or a weak one. So the discipline is to define the problem first, then see where AI genuinely fits.</p>
-
-    <div class="cards cols-2">
-
-      <div class="card" tabindex="0" role="button" aria-expanded="false">
-        <p class="card-title">Catastrophe claims and the NHC interface</p>
-        <p class="card-summary">Rising event volume, managed across a public/private boundary.</p>
-        <div class="card-detail">
-          <div class="divider"></div>
-          Rising event volume. Claims are managed on behalf of the Natural Hazards Commission up to the cap, with private cover above it, reconciled behind the scenes. The operational question: how to keep accuracy high while improving speed with fewer manual hands.
-          <div class="openq"><span class="q">?</span><span>How Tower currently structures its catastrophe surge response is something I'd want to understand from inside.</span></div>
+        <div class="card" tabindex="0" role="button" aria-expanded="false">
+          <p class="card-title">Catastrophe claims and the NHC interface</p>
+          <p class="card-summary">Rising event volume, managed across the public and private claim.</p>
+          <div class="card-detail">
+            <div class="divider"></div>
+            Rising event volume. Claims are managed on behalf of the NHC (National Hazards Commission) up to the cap, with private cover above it, reconciled behind the scenes. The question: how to keep accuracy high while improving speed with fewer manual hands.
+            <p class="gap"><b>Gap</b> What the progress is with AI in catastrophe claims at Tower is something I'd want to understand.</p>
+          </div>
         </div>
-      </div>
 
-      <div class="card" tabindex="0" role="button" aria-expanded="false">
-        <p class="card-title">Pricing model cadence</p>
-        <p class="card-summary">Sophisticated address-level risk pricing, updated annually at renewal.</p>
-        <div class="card-detail">
-          <div class="divider"></div>
-          Address-level risk pricing is sophisticated, fed by specialist peril data. Updates land annually at renewal. A cautious area: continuous dynamic pricing would cut against customer fairness and the FMA's conduct expectations.
-          <div class="openq"><span class="q">?</span><span>Whether the underlying risk data flows in continuously while customer pricing stays annual is an open question.</span></div>
+        <div class="card" tabindex="0" role="button" aria-expanded="false">
+          <p class="card-title">Underwriting and claims</p>
+          <p class="card-summary">Where AI takes the routine load and assists on the complex cases.</p>
+          <div class="card-detail">
+            <div class="divider"></div>
+            Beyond the contact centre, AI can take the routine and admin load in underwriting and claims, and assist on the complex cases: surfacing comparable risks, checking the rules are working on edge cases, triaging claims and handling documents. That frees underwriters and claims people for the judgement work.
+            <p class="gap"><b>Gap</b> What the progress is with AI within underwriting and claims at Tower is something I'd want to understand.</p>
+          </div>
         </div>
+
       </div>
+    </section>
 
-    </div>
-  </section>
+  </div>
 
-  <div class="flow">↓</div>
-
-  <!-- ====================== BAND 3 - THE HEART ====================== -->
-  <section class="band band-heart">
+  <!-- ============ BAND 3 - THE HEART ============ -->
+  <section class="band-heart">
     <p class="band-label">The three capabilities</p>
-    <h2 class="band-heading">The real challenge: turning frontline nuance into AI-ready process</h2>
-    <p class="band-frame">AI works as an assistant, not a decision-maker. It performs brilliantly on what is documented well, and loses the plot where human nuance was never captured. Bridging that gap needs three capabilities working together.</p>
+    <h2 class="band-heading">The real challenge with process excellence</h2>
+    <p class="heart-sub">Turning a human-led process and its nuance into AI-ready documentation.</p>
+    <p class="band-frame">AI performs brilliantly on what is documented well. It won't carry the human nuance if that nuance was never captured. Bridging that gap needs three capabilities working together.</p>
 
     <div class="cards cols-3">
 
       <div class="card" tabindex="0" role="button" aria-expanded="false">
-        <p class="card-title"><span class="num">1</span> Understand the operation and its nuance</p>
-        <p class="card-summary">Sit with the frontline and find the judgement that never reaches the page.</p>
+        <p class="card-title"><span class="num">1</span> Understanding how the frontline works, and how their judgement can reach the SOP</p>
+        <p class="card-summary">Find the human judgement and nuance, and a way to capture it.</p>
         <div class="card-detail">
           <div class="divider"></div>
-          Someone who knows insurance processes well enough to sit with underwriters and claims people, talk through the technical detail of how a process actually works, and spot the judgement and nuance that lives in people's heads but never reaches the documentation.
+          Someone who knows insurance processes well enough to sit with underwriters and claims people, talk through the technical detail of how a process actually works and how their thinking works, spot the nuance and judgement, and find ways to capture it into the documentation.
         </div>
       </div>
 
       <div class="card" tabindex="0" role="button" aria-expanded="false">
-        <p class="card-title"><span class="num">2</span> Capture the nuance into the SOP</p>
-        <p class="card-summary">Structure documentation so it carries the decisions, not just the steps.</p>
+        <p class="card-title"><span class="num">2</span> Capturing the nuance into the SOP</p>
+        <p class="card-summary">Structure the documentation so it includes the decisions under ambiguity, not a set of rigid steps.</p>
         <div class="card-detail">
           <div class="divider"></div>
-          Knowing how to structure documentation so it captures not just the steps but the decision points and the judgement behind them. Asking the questions that move frontline people from "this one policy" to systems thinking - how this process and its Level 4/5 documentation affects the whole department's efficiency. The structure and layout of the SOP determines how well AI inherits the nuance.
+          The second step: taking those insights and putting them into a properly structured document that includes the decisions under ambiguity, not just a set of rigid steps. It is also about how a process and its Level 4 and 5 documentation affects the whole department's efficiency.
         </div>
       </div>
 
       <div class="card" tabindex="0" role="button" aria-expanded="false">
-        <p class="card-title"><span class="num">3</span> Fit the SOP into the practical build</p>
-        <p class="card-summary">Know where AI runs, where a human evaluates, and where judgement stays.</p>
+        <p class="card-title"><span class="num">3</span> Using the SOP for effective AI integration</p>
+        <p class="card-summary">Know where AI runs and where a human evaluates.</p>
         <div class="card-detail">
           <div class="divider"></div>
-          Understanding where AI genuinely improves efficiency and where it does not. Where the human stays in the loop because the judgement is the value. Where AI assists, where a human evaluates, where AI can run. Measurement built in: the parameters that show whether AI is multiplying efficiency or amplifying a problem.
+          Understanding where AI can be used to improve efficiency, and where the human stays in the loop because customer outcomes are the ultimate value.
         </div>
       </div>
 
     </div>
-
-    <p class="heart-link">The same capability set - operations understanding, nuance capture, and practical AI judgement - applied as one.</p>
   </section>
 
-  <div class="flow">↓</div>
-
-  <!-- ====================== BAND 4 - PEOPLE ====================== -->
+  <!-- ============ BAND 4 - PEOPLE ============ -->
   <section class="band band-people">
     <p class="band-label">People and capability</p>
     <h2 class="band-heading">The people who power it</h2>
@@ -451,11 +442,11 @@
     <div class="cards cols-2">
 
       <div class="card" tabindex="0" role="button" aria-expanded="false">
-        <p class="card-title">Redeploy, don't replace</p>
-        <p class="card-summary">The people freed by AI hold the deepest process knowledge.</p>
+        <p class="card-title">A shift of focus for people on the frontline</p>
+        <p class="card-summary">The people on the frontline hold the deepest process knowledge.</p>
         <div class="card-detail">
           <div class="divider"></div>
-          As AI takes the manual load as an assistant, the people freed up are the ones who hold the deepest process knowledge. The opportunity is to redeploy capable people into process excellence - identifying which micro-processes need documenting and feeding clean, structured, nuance-rich detail into the SOPs that train the AI.
+          As AI takes the manual load as an assistant, the people who hold the deepest process knowledge are freed up. The opportunity is to redeploy them into process excellence, identifying which micro-processes need documenting and feeding clean, structured, nuance-rich detail into the SOPs.
         </div>
       </div>
 
@@ -464,15 +455,15 @@
         <p class="card-summary">Resourcing AI-enabled improvement means resourcing these people.</p>
         <div class="card-detail">
           <div class="divider"></div>
-          Resourcing AI-enabled process improvement means resourcing these people. They do not build the AI - they make it work by giving it documentation that carries the human nuance.
-          <div class="openq"><span class="q">?</span><span>How Tower is currently resourcing this shift is something I'd be keen to understand.</span></div>
+          Building AI is not mandatory for them. Their work here is giving thorough, high-quality documentation that carries the nuance of how they work, the detail that feeds effective AI integration.
+          <p class="gap"><b>Gap</b> How Tower is currently resourcing this shift is something I'd love to understand.</p>
         </div>
       </div>
 
     </div>
   </section>
 
-  <p class="signature">Sai Medicherla - Operations and AI Automation</p>
+  <p class="footer">Thinking by Sai Medicherla - Ops and AI Automation professional</p>
 
 </div>
 

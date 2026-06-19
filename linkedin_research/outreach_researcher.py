@@ -974,9 +974,12 @@ def main() -> None:
                 if ok:
                     if s.get("profile_err"):
                         st.caption(f"(profile step note: {s['profile_err']})")
-                    # st.code(..., language="") renders the full profile text with a
-                    # built-in copy icon in the top-right — one click copies it all.
-                    st.code(s.get("report_md", "(no content)"), language="")
+                    report = s.get("report_md", "(no content)")
+                    # Readable, formatted report (headers, bold, bullets).
+                    st.markdown(report)
+                    # Copy raw text below — st.code(..., language="") gives a
+                    # built-in copy icon; one click copies the full raw report.
+                    st.code(report, language="")
                 else:
                     st.error(s.get("error", "Scrape failed."))
 

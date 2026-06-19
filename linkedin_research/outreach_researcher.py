@@ -537,8 +537,76 @@ def _fmt_ts(iso: str) -> str:
         return ""
 
 
-def load_history() -> list[dict]:
-    """All saved sessions (raw, file order). Never raises."""
+# --- Optional cloud sync (Supabase Storage) -------------------------------- #
+# Streamlit Community Cloud wipes the container disk on reboot/redeploy, so the
+# local file alone does not survive. If SUPABASE_URL + SUPABASE_KEY are set in
+# secrets, the history is synced to a private Supabase Storage bucket (the source
+# of truth), with the local file kept as a fast cache + offline fallback. With
+# no Supabase secrets, behaviour is exactly as before: local file only.
+# Uses the Storage REST API via `requests` — no extra dependency.
+OBJECT_NAME = "outreach_history.json"
+
+
+def _sb_config() -> tuple[str, str, str] | None:
+    url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+    key = os.environ.get("SUPABASE_KEY", "").strip()
+    if not url or not key:
+        return None
+    bucket = os.environ.get("SUPABASE_BUCKET", "").strip() or "outreach-history"
+    return url, key, bucket
+
+
+def cloud_status() -> str:
+    return ("☁️ Synced to Supabase" if _sb_config()
+            else "💾 Local only — set SUPABASE_URL/KEY to sync across reboots")
+
+
+def _sb_endpoint(url: str, bucket: str) -> str:
+    return f"{url}/storage/v1/object/{bucket}/{OBJECT_NAME}"
+
+
+def _sb_download() -> tuple[bool, list[dict]]:
+    """(ok, sessions). ok=False means configured but the fetch failed (so the
+    caller should fall back to the local cache rather than assume empty)."""
+    cfg = _sb_config()
+    if not cfg:
+        return False, []
+    url, key, bucket = cfg
+    headers = {"Authorization": f"Bearer {key}", "apikey": key}
+    try:
+        r = requests.get(_sb_endpoint(url, bucket), headers=headers, timeout=20)
+    except Exception:
+        return False, []
+    if r.status_code == 200:
+        try:
+            data = r.json()
+        except ValueError:
+            return True, []
+        return True, (data if isinstance(data, list) else [])
+    if r.status_code in (400, 404):
+        return True, []  # object not created yet -> genuinely empty
+    return False, []     # auth/other error -> let caller use local cache
+
+
+def _sb_upload(sessions: list[dict]) -> bool:
+    cfg = _sb_config()
+    if not cfg:
+        return False
+    url, key, bucket = cfg
+    headers = {
+        "Authorization": f"Bearer {key}", "apikey": key,
+        "Content-Type": "application/json", "x-upsert": "true",
+    }
+    payload = json.dumps(sessions, ensure_ascii=False, indent=2).encode("utf-8")
+    try:
+        r = requests.post(_sb_endpoint(url, bucket), headers=headers,
+                          data=payload, timeout=20)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+
+def _read_local() -> list[dict]:
     try:
         with open(HISTORY_PATH, encoding="utf-8") as fh:
             data = json.load(fh)
@@ -549,12 +617,30 @@ def load_history() -> list[dict]:
         return []
 
 
-def _write_history(sessions: list[dict]) -> None:
+def _write_local(sessions: list[dict]) -> None:
     try:
         with open(HISTORY_PATH, "w", encoding="utf-8") as fh:
             json.dump(sessions, fh, ensure_ascii=False, indent=2)
     except Exception:
         pass  # a persistence hiccup must never break the page
+
+
+def load_history() -> list[dict]:
+    """All saved sessions. Cloud is source of truth when configured; otherwise
+    the local file. Never raises."""
+    if _sb_config():
+        ok, data = _sb_download()
+        if ok:
+            _write_local(data)   # refresh the local cache
+            return data
+        return _read_local()     # cloud unreachable -> use cache
+    return _read_local()
+
+
+def _write_history(sessions: list[dict]) -> None:
+    _write_local(sessions)       # always keep a local cache
+    if _sb_config():
+        _sb_upload(sessions)     # and push to the durable cloud store
 
 
 def upsert_session(entry: dict) -> None:
@@ -633,6 +719,7 @@ def render_history_sidebar() -> None:
     ss = st.session_state
     with st.sidebar:
         st.header("🗂️ Research history")
+        st.caption(cloud_status())
         sessions = sorted(load_history(),
                           key=lambda s: s.get("timestamp", ""), reverse=True)
         if not sessions:

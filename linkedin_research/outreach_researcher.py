@@ -804,7 +804,7 @@ def main() -> None:
     apify_token = os.environ.get("APIFY_TOKEN", "").strip()
     anthropic_ready = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
 
-    st.title("🇳🇿 NZ Outreach Researcher")
+    st.title("NZ Outreach Researcher")
     st.caption(
         f"Perplexity {'✅' if pplx_key else '❌'}  ·  "
         f"Apify {'✅' if apify_token else '❌'}  ·  "

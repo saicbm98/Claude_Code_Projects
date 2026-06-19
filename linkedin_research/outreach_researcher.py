@@ -33,6 +33,7 @@ import json
 import os
 import re
 import sys
+import uuid
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -516,6 +517,167 @@ def run_draft_chat(ai, prompt: str, scraped: dict, candidates: list[dict]) -> st
 
 
 # --------------------------------------------------------------------------- #
+# Persistent research history (linkedin_research/outreach_history.json)
+# --------------------------------------------------------------------------- #
+# A single JSON file holding a LIST of session entries — survives page refreshes
+# and app sleep cycles (st.session_state alone does not). Mirrors the Activity
+# Researcher's history pattern, but as one append-only file rather than one file
+# per session.
+HISTORY_PATH = os.path.join(_HERE, "outreach_history.json")
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _fmt_ts(iso: str) -> str:
+    try:
+        return datetime.fromisoformat(iso).strftime("%b %d, %H:%M")
+    except (ValueError, TypeError):
+        return ""
+
+
+def load_history() -> list[dict]:
+    """All saved sessions (raw, file order). Never raises."""
+    try:
+        with open(HISTORY_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, list) else []
+    except FileNotFoundError:
+        return []
+    except Exception:
+        return []
+
+
+def _write_history(sessions: list[dict]) -> None:
+    try:
+        with open(HISTORY_PATH, "w", encoding="utf-8") as fh:
+            json.dump(sessions, fh, ensure_ascii=False, indent=2)
+    except Exception:
+        pass  # a persistence hiccup must never break the page
+
+
+def upsert_session(entry: dict) -> None:
+    """Append a new session, or update the existing one with the same id."""
+    sessions = load_history()
+    for i, s in enumerate(sessions):
+        if s.get("id") == entry.get("id"):
+            sessions[i] = entry
+            break
+    else:
+        sessions.append(entry)
+    _write_history(sessions)
+
+
+def delete_history_session(sid: str) -> None:
+    _write_history([s for s in load_history() if s.get("id") != sid])
+
+
+def persist_current_session() -> None:
+    """Snapshot the active research into the history file (append or update).
+    Called once after a Perplexity run and again after each Apify scrape."""
+    ss = st.session_state
+    if not ss.get("or_session_id"):
+        return
+    upsert_session({
+        "id": ss.or_session_id,
+        "company": ss.get("or_company", ""),
+        "timestamp": ss.get("or_created_at") or _now_iso(),
+        "personas": ss.get("or_personas", []),
+        "depth": ss.get("or_depth", "Medium"),
+        "context": ss.get("or_context", ""),
+        "candidates": ss.get("or_candidates", []),   # full discovery rows
+        "scraped": ss.get("or_scraped", {}),          # name -> scrape result
+        "raw_text": ss.get("or_raw_text", ""),
+    })
+
+
+def load_session_into_state(sid: str) -> bool:
+    """Restore a saved session into the page exactly as it was. The form input
+    keys (or_in_*) are set too, so the form repopulates on the next run."""
+    for s in load_history():
+        if s.get("id") != sid:
+            continue
+        ss = st.session_state
+        ss.or_session_id = s.get("id", "")
+        ss.or_created_at = s.get("timestamp", "")
+        ss.or_company = s.get("company", "")
+        ss.or_personas = s.get("personas", [])
+        ss.or_depth = s.get("depth", "Medium")
+        ss.or_context = s.get("context", "")
+        ss.or_candidates = s.get("candidates", [])
+        ss.or_scraped = s.get("scraped", {})
+        ss.or_raw_text = s.get("raw_text", "")
+        ss.or_chat = []  # fresh drafting chat for the loaded company
+        # Repopulate the form inputs (widget-backed keys).
+        ss.or_in_company = ss.or_company
+        ss.or_in_personas = ss.or_personas
+        ss.or_in_depth = ss.or_depth if ss.or_depth in ("Low", "Medium", "High") else "Medium"
+        ss.or_in_context = ss.or_context
+        return True
+    return False
+
+
+def clear_active_view() -> None:
+    """Reset the open research view (used when the active session is deleted)."""
+    ss = st.session_state
+    ss.or_session_id = ""
+    ss.or_created_at = ""
+    ss.or_candidates = []
+    ss.or_scraped = {}
+    ss.or_raw_text = ""
+
+
+def render_history_sidebar() -> None:
+    """Scrollable list of past sessions (company + date) with open + delete."""
+    ss = st.session_state
+    with st.sidebar:
+        st.header("🗂️ Research history")
+        sessions = sorted(load_history(),
+                          key=lambda s: s.get("timestamp", ""), reverse=True)
+        if not sessions:
+            st.caption("No saved research yet. Run a search to start.")
+            return
+        box = st.container(height=420)  # fixed-height -> scrollable list
+        with box:
+            for s in sessions:
+                sid = s.get("id")
+                active = sid == ss.get("or_session_id")
+                label = (f"{s.get('company') or 'Untitled'}  ·  "
+                         f"{_fmt_ts(s.get('timestamp', ''))}")
+                open_col, del_col = st.columns([0.8, 0.2])
+                with open_col:
+                    if st.button(label, key=f"or_open_{sid}",
+                                 use_container_width=True,
+                                 type="primary" if active else "secondary"):
+                        load_session_into_state(sid)
+                        ss.or_pending_delete = None
+                        st.rerun()
+                with del_col:
+                    if st.button("🗑", key=f"or_del_{sid}",
+                                 use_container_width=True,
+                                 help="Delete this session"):
+                        ss.or_pending_delete = sid
+                        st.rerun()
+                if ss.get("or_pending_delete") == sid:
+                    st.caption(f"Delete “{s.get('company') or 'Untitled'}” research?")
+                    yes_col, no_col = st.columns(2)
+                    with yes_col:
+                        if st.button("✅ Delete", key=f"or_delyes_{sid}",
+                                     use_container_width=True):
+                            delete_history_session(sid)
+                            if active:
+                                clear_active_view()
+                            ss.or_pending_delete = None
+                            st.rerun()
+                    with no_col:
+                        if st.button("✖ Cancel", key=f"or_delno_{sid}",
+                                     use_container_width=True):
+                            ss.or_pending_delete = None
+                            st.rerun()
+
+
+# --------------------------------------------------------------------------- #
 # Session state
 # --------------------------------------------------------------------------- #
 def init_state() -> None:
@@ -525,6 +687,18 @@ def init_state() -> None:
     ss.setdefault("or_raw_text", "")        # raw assistant text (debug aid)
     ss.setdefault("or_scraped", {})         # name -> deep_scrape_person result
     ss.setdefault("or_chat", [])            # [{role, content}]
+    # Persistent-history bookkeeping.
+    ss.setdefault("or_session_id", "")
+    ss.setdefault("or_created_at", "")
+    ss.setdefault("or_personas", list(DEFAULT_PERSONAS))
+    ss.setdefault("or_depth", "Medium")
+    ss.setdefault("or_context", "")
+    ss.setdefault("or_pending_delete", None)
+    # Form-input widget keys (so loaded sessions repopulate the form).
+    ss.setdefault("or_in_company", "")
+    ss.setdefault("or_in_personas", list(DEFAULT_PERSONAS))
+    ss.setdefault("or_in_depth", "Medium")
+    ss.setdefault("or_in_context", "")
 
 
 # --------------------------------------------------------------------------- #
@@ -536,6 +710,8 @@ def main() -> None:
     load_secrets_into_env()  # bridge st.secrets -> os.environ (Cloud + local)
     init_state()
     ss = st.session_state
+
+    render_history_sidebar()  # persistent past-sessions list (left sidebar)
 
     pplx_key = os.environ.get("PERPLEXITY_API_KEY", "").strip()
     apify_token = os.environ.get("APIFY_TOKEN", "").strip()
@@ -551,18 +727,20 @@ def main() -> None:
     # ------------------------------------------------------------------ #
     # Input form
     # ------------------------------------------------------------------ #
+    # Inputs are bound to session_state keys (or_in_*) so loading a past session
+    # repopulates the form. Initial values are seeded in init_state().
     with st.form("research_form"):
-        company = st.text_input("Company name", value=ss.or_company,
+        company = st.text_input("Company name", key="or_in_company",
                                 placeholder="e.g. Tower Insurance")
         personas = st.multiselect("Target personas", PERSONA_OPTIONS,
-                                  default=DEFAULT_PERSONAS)
+                                  key="or_in_personas")
         depth = st.selectbox(
-            "Research depth", ["Low", "Medium", "High"], index=1,
+            "Research depth", ["Low", "Medium", "High"], key="or_in_depth",
             help="Maps to Perplexity search context size. Low = fastest/cheapest, "
                  "High = deepest.",
         )
         context = st.text_area(
-            "Additional context",
+            "Additional context", key="or_in_context",
             placeholder="e.g. Only New Zealand based employees. Focus on "
                         "underwriting, transformation, operations, and AI roles. "
                         "Managers and senior departmental members only.",
@@ -578,6 +756,9 @@ def main() -> None:
                      "and reload.")
         else:
             ss.or_company = company.strip()
+            ss.or_personas = personas
+            ss.or_depth = depth
+            ss.or_context = context
             with st.spinner(f"Researching prospects at {company.strip()} via "
                             f"Perplexity ({depth} depth)…"):
                 try:
@@ -586,6 +767,10 @@ def main() -> None:
                     ss.or_candidates = candidates
                     ss.or_raw_text = raw_text
                     ss.or_scraped = {}   # fresh discovery -> clear old scrapes
+                    # New session per run; save it to the persistent history file.
+                    ss.or_session_id = uuid.uuid4().hex
+                    ss.or_created_at = _now_iso()
+                    persist_current_session()
                 except Exception as exc:
                     st.error(f"Discovery failed: {exc}")
             if ss.or_candidates:
@@ -623,7 +808,8 @@ def main() -> None:
                 "LinkedIn URL": st.column_config.LinkColumn("LinkedIn URL"),
                 "Background": st.column_config.TextColumn("Background", width="large"),
             },
-            key="or_editor",
+            # Per-session key so switching sessions gives a fresh, correct editor.
+            key=f"or_editor_{ss.or_session_id or 'new'}",
         )
 
         # Map the ticked rows back to the original candidate dicts (by position).
@@ -651,6 +837,8 @@ def main() -> None:
                                   "error": f"Unexpected error: {exc}"}
                     ss.or_scraped[person["name"]] = result
                 progress.progress(1.0, text="Deep scrape complete.")
+                # Update this session's record with the freshly scraped profiles.
+                persist_current_session()
 
     # ------------------------------------------------------------------ #
     # Stage 4 display: scraped profiles in expanders

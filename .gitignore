@@ -21,3 +21,6 @@ build/
 # Saved chat sessions (contain scraped personal data)
 sessions/
 linkedin_research/sessions/
+
+# Outreach Researcher persistent history (contains scraped personal data)
+linkedin_research/outreach_history.json

@@ -714,10 +714,33 @@ def clear_active_view() -> None:
     ss.or_raw_text = ""
 
 
+def new_search() -> None:
+    """Clear all current session state back to a blank form for a new company.
+    Does NOT touch the history store — past sessions stay listed in the sidebar."""
+    ss = st.session_state
+    clear_active_view()
+    ss.or_chat = []
+    ss.or_pending_delete = None
+    # Logical form state.
+    ss.or_company = ""
+    ss.or_personas = list(DEFAULT_PERSONAS)
+    ss.or_depth = "Medium"
+    ss.or_context = ""
+    # Widget-backed form keys (so the form renders blank/defaults on rerun).
+    ss.or_in_company = ""
+    ss.or_in_personas = list(DEFAULT_PERSONAS)
+    ss.or_in_depth = "Medium"
+    ss.or_in_context = ""
+
+
 def render_history_sidebar() -> None:
     """Scrollable list of past sessions (company + date) with open + delete."""
     ss = st.session_state
     with st.sidebar:
+        if st.button("✨ New search", use_container_width=True,
+                     key="or_new_search"):
+            new_search()
+            st.rerun()
         st.header("🗂️ Research history")
         st.caption(cloud_status())
         sessions = sorted(load_history(),
@@ -898,6 +921,16 @@ def main() -> None:
             # Per-session key so switching sessions gives a fresh, correct editor.
             key=f"or_editor_{ss.or_session_id or 'new'}",
         )
+
+        # Save the current session (discovery only, no scrape needed) so it can
+        # be reopened later to scrape specific people.
+        if st.button("💾 Save to history", use_container_width=True,
+                     key="or_save_btn"):
+            if not ss.or_session_id:
+                ss.or_session_id = uuid.uuid4().hex
+                ss.or_created_at = _now_iso()
+            persist_current_session()
+            st.success("Saved to history.")
 
         # Map the ticked rows back to the original candidate dicts (by position).
         for i, keep in enumerate(edited["Select"].tolist()):

@@ -22,6 +22,10 @@ from email.mime.text import MIMEText
 import requests
 from dotenv import load_dotenv, set_key
 
+# Load .env early so the email settings below can come from the environment
+# instead of being hardcoded in source (keeps personal addresses out of git).
+load_dotenv()
+
 # ── Config ──────────────────────────────────────────────────────────────────
 
 HOME_URL = "https://itms.kar.nic.in/hrcehome/index_temple.php?tid=21"
@@ -32,8 +36,9 @@ SERVICE_URL = (
 
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
-FROM_EMAIL = "medicherlasaicharan@gmail.com"
-TO_EMAIL   = "medicherlasaicharan@gmail.com"
+# Read from .env (ALERT_FROM_EMAIL / ALERT_TO_EMAIL) — no personal address in source.
+FROM_EMAIL = os.getenv("ALERT_FROM_EMAIL", "").strip()
+TO_EMAIL   = os.getenv("ALERT_TO_EMAIL", "").strip() or FROM_EMAIL
 
 WATCH_MONTHS = {5, 6}   # May and June
 WATCH_YEAR   = 2026

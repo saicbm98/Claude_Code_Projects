@@ -1,0 +1,696 @@
+<mxfile host="app.diagrams.net" modified="2026-05-04T00:00:00.000Z" agent="Claude" version="21.0.0" type="device">
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PAGE 1: MASTER ARCHITECTURE                            -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <diagram id="d_master" name="1. Master Architecture">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="m_start" value="User opens chat" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="480" y="40" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_greet" value="Rondo greets user&#xa;and presents routing menu" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="455" y="160" width="250" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_route" value="Who are you?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="465" y="285" width="230" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_moda" value="MODULE A&#xa;Prospect Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="100" y="470" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_modb" value="MODULE B&#xa;Active Onboarding Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="480" y="470" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_modc" value="MODULE C&#xa;Established Client Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="860" y="470" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_resa" value="Query resolved?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="70" y="610" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_resb" value="Query resolved?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="450" y="610" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_resc" value="Query resolved?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="830" y="610" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_esc" value="ESCALATION ENGINE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="615" width="220" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_notify" value="Notify human rep&#xa;via Slack + email" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="740" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_handoff" value="Bot hands off with&#xa;full context summary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="860" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m_csat" value="Post-session CSAT survey&#xa;— END —" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="450" y="830" width="260" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="me1" edge="1" source="m_start" target="m_greet" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me2" edge="1" source="m_greet" target="m_route" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me3" value="A — Exploring Round" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="m_route" target="m_moda" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me4" value="B — New client setup" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="m_route" target="m_modb" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me5" value="C — Existing client" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="m_route" target="m_modc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me6" edge="1" source="m_moda" target="m_resa" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me7" edge="1" source="m_modb" target="m_resb" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me8" edge="1" source="m_modc" target="m_resc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me9" value="Yes" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="m_resa" target="m_csat" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me10" value="Yes" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="m_resb" target="m_csat" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me11" value="Yes" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="m_resc" target="m_csat" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me12" value="No — escalate" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="m_resa" target="m_esc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me13" value="No — escalate" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="m_resb" target="m_esc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me14" value="No — escalate" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="m_resc" target="m_esc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me15" edge="1" source="m_esc" target="m_notify" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me16" edge="1" source="m_notify" target="m_handoff" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="me17" edge="1" source="m_handoff" target="m_csat" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PAGE 2: MODULE A — PROSPECT FLOW                       -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <diagram id="d_prospect" name="2. Module A — Prospect">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="a_start" value="Enter Prospect Module" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="570" y="30" width="220" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_topic" value="What does the user&#xa;want to know?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="150" width="260" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_overview" value="Explain 4 products:&#xa;Treasury · AP · Payroll · Multi-Entity&#xa;+ key metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="30" y="340" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_yield" value="Up to 5% via BlackRock MMF&#xa;4× vs standard savings&#xa;+ capital-at-risk disclaimer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;" vertex="1" parent="1">
+          <mxGeometry x="220" y="340" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_price" value="Explain free tier&#xa;Direct to /pricing page" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="410" y="340" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_security" value="FCA · ISO 27001 · FSCS&#xa;Open Banking · data handling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="600" y="340" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_integrations" value="2000+ banks · Xero · NetSuite&#xa;Slack · WhatsApp · email" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="790" y="340" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_who" value="Founders · CFOs&#xa;VC operators&#xa;High-growth companies" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="980" y="340" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_speed" value="1-click signup&#xa;30-sec bank connection&#xa;5 days to automation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1170" y="340" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_compare" value="Multi-bank aggregation&#xa;Yield optimisation&#xa;AI automation vs bank" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="340" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_cta" value="Follow-up action?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="530" width="260" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_another" value="Another question&#xa;(loop back to topics)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="220" y="730" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_signup" value="Direct to&#xa;1-click signup" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="440" y="730" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_demo" value="Capture name · company · email&#xa;Notify rep for demo booking" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="660" y="730" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_esc" value="Pricing negotiation /&#xa;enterprise deal /&#xa;unresolvable — ESCALATE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="880" y="730" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a_end" value="Return to Master Flow" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="910" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ae1" edge="1" source="a_start" target="a_topic" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae2" value="How Round works" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_topic" target="a_overview" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae3" value="Yield / returns" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_topic" target="a_yield" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae4" value="Pricing" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_topic" target="a_price" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae5" value="Security" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_topic" target="a_security" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae6" value="Integrations" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_topic" target="a_integrations" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae7" value="Who is it for" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_topic" target="a_who" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae8" value="Setup speed" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_topic" target="a_speed" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae9" value="vs Bank" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_topic" target="a_compare" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae10" edge="1" source="a_overview" target="a_cta" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae11" edge="1" source="a_yield" target="a_cta" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae12" edge="1" source="a_price" target="a_cta" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae13" edge="1" source="a_security" target="a_cta" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae14" edge="1" source="a_integrations" target="a_cta" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae15" edge="1" source="a_who" target="a_cta" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae16" edge="1" source="a_speed" target="a_cta" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae17" edge="1" source="a_compare" target="a_cta" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae18" value="Another question" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_cta" target="a_another" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae19" value="Ready to sign up" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_cta" target="a_signup" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae20" value="Book a demo" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_cta" target="a_demo" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae21" value="Pricing / enterprise / unresolvable" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="a_cta" target="a_esc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae22" value="Loop back" style="edgeStyle=orthogonalEdgeStyle;curved=1;" edge="1" source="a_another" target="a_topic" parent="1">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="310" y="840" /><mxPoint x="310" y="200" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="ae23" edge="1" source="a_signup" target="a_end" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae24" edge="1" source="a_demo" target="a_end" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ae25" edge="1" source="a_esc" target="a_end" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PAGE 3: MODULE B — ACTIVE ONBOARDING FLOW              -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <diagram id="d_onboard" name="3. Module B — Active Onboarding">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="b_start" value="Enter Onboarding Module" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="30" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_phase" value="Which onboarding phase?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="540" y="150" width="280" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- 7 branch boxes -->
+        <mxCell id="b_banks" value="Day 1: Connect banks&#xa;Step-by-step Open Banking&#xa;~30 sec / bank&#xa;2000+ UK/EU banks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="20" y="340" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_deposit" value="Day 1: First deposit&#xa;Vault diversification&#xa;100+ FSCS-protected&#xa;savings accounts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="210" y="340" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_workflows" value="Week 1: Approval workflows&#xa;Configure thresholds&#xa;Payment schedules&#xa;Slack approval setup" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="400" y="340" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_erp" value="Week 1: ERP sync&#xa;Xero / NetSuite&#xa;Two-way real-time&#xa;reconciliation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="590" y="340" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_kyb" value="KYB question" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="780" y="340" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_automation" value="Week 2: Automation&#xa;Confirm workflows active&#xa;Review yield performance&#xa;Reduced manual work" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="970" y="340" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_other" value="Something else&#xa;(free-text query)&#xa;Attempt 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="340" width="170" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- KYB sub-flow -->
+        <mxCell id="b_kyb_check" value="Business days elapsed?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="750" y="510" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_kyb_wait" value="Confirm 3-day SLA&#xa;Explain next steps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="680" y="680" width="170" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_kyb_esc" value="HIGH PRIORITY&#xa;Escalate to human rep&#xa;Capture company + email" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="680" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Other sub-flow (2-attempt retry) -->
+        <mxCell id="b_attempt1" value="Resolved after&#xa;attempt 1?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="510" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_retry" value="Rephrase answer&#xa;Offer alternative approach&#xa;Attempt 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="680" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_attempt2" value="Resolved after&#xa;attempt 2?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="830" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_esc_other" value="Escalate to human rep" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="1000" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Central resolved diamond -->
+        <mxCell id="b_resolved" value="Follow-up needed?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="390" y="580" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_end" value="Return to Master Flow" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="530" y="1100" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Edges -->
+        <mxCell id="be1" edge="1" source="b_start" target="b_phase" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be2" value="Day 1 — banks" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_phase" target="b_banks" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be3" value="Day 1 — deposit" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_phase" target="b_deposit" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be4" value="Week 1 — workflows" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_phase" target="b_workflows" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be5" value="Week 1 — ERP" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_phase" target="b_erp" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be6" value="KYB question" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_phase" target="b_kyb" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be7" value="Week 2 — automation" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_phase" target="b_automation" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be8" value="Something else" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_phase" target="b_other" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="be9" edge="1" source="b_banks" target="b_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be10" edge="1" source="b_deposit" target="b_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be11" edge="1" source="b_workflows" target="b_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be12" edge="1" source="b_erp" target="b_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be13" edge="1" source="b_automation" target="b_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="be14" edge="1" source="b_kyb" target="b_kyb_check" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be15" value="1–3 days" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_kyb_check" target="b_kyb_wait" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be16" value="4+ days" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_kyb_check" target="b_kyb_esc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be17" edge="1" source="b_kyb_wait" target="b_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be18" edge="1" source="b_kyb_esc" target="b_end" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="be19" edge="1" source="b_other" target="b_attempt1" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be20" value="Yes" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_attempt1" target="b_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be21" value="No" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_attempt1" target="b_retry" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be22" edge="1" source="b_retry" target="b_attempt2" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be23" value="Yes" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_attempt2" target="b_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be24" value="No" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_attempt2" target="b_esc_other" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be25" edge="1" source="b_esc_other" target="b_end" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="be26" value="Another question" style="edgeStyle=orthogonalEdgeStyle;curved=1;" edge="1" source="b_resolved" target="b_phase" parent="1">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="280" y="625" /><mxPoint x="280" y="200" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="be27" value="No — done" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_resolved" target="b_end" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="be28" value="Unresolvable" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="b_resolved" target="b_esc_other" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PAGE 4: MODULE C — ESTABLISHED CLIENT FLOW             -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <diagram id="d_established" name="4. Module C — Established Client">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="c_start" value="Enter Established Client Module" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="700" y="30" width="260" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_topic" value="Topic area?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="710" y="150" width="240" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Row 1: 6 topics -->
+        <mxCell id="c_security" value="Fund security&#xa;Assets with regulated custodians&#xa;FSCS multi-bank protection&#xa;Direct access retained" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="20" y="330" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_compliance" value="Compliance &amp; regulation&#xa;FCA · Wealthkernel FRN 723719&#xa;Round FRN 995009&#xa;ISO 27001:2022" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="200" y="330" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_withdraw" value="Withdrawals &amp; liquidity&#xa;Same-day clearing by 10:30am&#xa;Next-day liquidity for MMFs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="380" y="330" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_workflows" value="Agentic Workflow Builder&#xa;Plain-English → Round builds&#xa;→ Approve → 24/7 autonomous&#xa;Slack/WhatsApp alerts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="560" y="330" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_payroll" value="Autonomous Payroll&#xa;Scheduled execution&#xa;Multi-currency&#xa;Full audit trail" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="740" y="330" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_multi" value="Multi-Entity&#xa;Consolidated view&#xa;across all entities&#xa;Cross-entity reporting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="920" y="330" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Row 2: 6 more topics -->
+        <mxCell id="c_fx" value="FX &amp; multi-currency&#xa;Fair FX pricing&#xa;Multi-currency payments&#xa;Real-time rates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="330" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_data" value="Data &amp; privacy&#xa;Credentials never stored&#xa;Open Banking compliant&#xa;2FA · no data sold" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="330" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_perms" value="Permissions &amp; approvals&#xa;Multi-layer permission controls&#xa;Approval threshold config&#xa;Team access management" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="330" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_billing" value="Pricing / billing&#xa;Direct to pricing page&#xa;for standard queries" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="510" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_billing_check" value="Complex negotiation?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1450" y="650" width="180" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_complaint" value="Complaint / dispute&#xa;IMMEDIATE escalation&#xa;No further bot handling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="510" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_invest" value="Investment advice&#xa;Cannot advise — state clearly&#xa;Recommend financial advisor&#xa;Offer to connect with rep" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;" vertex="1" parent="1">
+          <mxGeometry x="200" y="510" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Central resolved -->
+        <mxCell id="c_resolved" value="Follow-up needed?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="680" y="780" width="240" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_esc" value="Escalate to human rep" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="920" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_end" value="Return to Master Flow" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="690" y="1050" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Edges -->
+        <mxCell id="ce1" edge="1" source="c_start" target="c_topic" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce2" value="Fund security" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_security" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce3" value="Compliance" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_compliance" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce4" value="Withdrawals" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_withdraw" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce5" value="Workflows" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_workflows" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce6" value="Payroll" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_payroll" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce7" value="Multi-Entity" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_multi" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce8" value="FX" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_fx" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce9" value="Data &amp; privacy" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_data" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce10" value="Permissions" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_perms" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce11" value="Billing" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_billing" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce12" value="Complaint" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_complaint" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce13" value="Investment advice" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_topic" target="c_invest" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="ce14" edge="1" source="c_security" target="c_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce15" edge="1" source="c_compliance" target="c_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce16" edge="1" source="c_withdraw" target="c_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce17" edge="1" source="c_workflows" target="c_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce18" edge="1" source="c_payroll" target="c_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce19" edge="1" source="c_multi" target="c_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce20" edge="1" source="c_fx" target="c_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce21" edge="1" source="c_data" target="c_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce22" edge="1" source="c_perms" target="c_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="ce23" edge="1" source="c_billing" target="c_billing_check" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce24" value="No" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_billing_check" target="c_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce25" value="Yes" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_billing_check" target="c_esc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="ce26" edge="1" source="c_complaint" target="c_esc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce27" edge="1" source="c_invest" target="c_esc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="ce28" value="Another question" style="edgeStyle=orthogonalEdgeStyle;curved=1;" edge="1" source="c_resolved" target="c_topic" parent="1">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="560" y="830" /><mxPoint x="560" y="200" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="ce29" value="No — done" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_resolved" target="c_end" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce30" value="Unresolvable after 2 attempts" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="c_resolved" target="c_esc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ce31" edge="1" source="c_esc" target="c_end" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PAGE 5: ESCALATION ENGINE                              -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <diagram id="d_escalation" name="5. Escalation Engine">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="e_trig" value="ESCALATION TRIGGERED" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="540" y="30" width="260" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_reason" value="Reason for escalation?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="150" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- 7 reason boxes -->
+        <mxCell id="e_r1" value="Complaint&#xa;or dispute" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="20" y="340" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_r2" value="KYB overdue&#xa;4+ days" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="190" y="340" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_r3" value="User explicitly&#xa;requested human" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="360" y="340" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_r4" value="2 failed&#xa;resolution attempts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="530" y="340" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_r5" value="Investment&#xa;advice requested" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="700" y="340" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_r6" value="Pricing negotiation&#xa;/ enterprise deal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="870" y="340" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_r7" value="Account-specific&#xa;data needed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="340" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Priority tags -->
+        <mxCell id="e_high" value="PRIORITY: HIGH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="80" y="510" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_normal" value="PRIORITY: NORMAL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="820" y="510" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Shared flow -->
+        <mxCell id="e_capture" value="Collect user details&#xa;Name · Company · Email" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="480" y="660" width="280" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_summary" value="Generate conversation summary&#xa;(last 3 turns + issue description)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="480" y="780" width="280" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_slack" value="POST to Slack&#xa;#escalations channel&#xa;with priority tag" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="320" y="920" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_email" value="Send email to&#xa;human rep&#xa;with full transcript" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="740" y="920" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_user_msg" value="Bot confirms handoff to user:&#xa;&quot;Connecting you with the Round team.&#xa;They respond within a few hours&#xa;via your dedicated Slack channel.&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="400" y="1070" width="440" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_end" value="Return to Master Flow → CSAT" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="1220" width="280" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Edges -->
+        <mxCell id="ee1" edge="1" source="e_trig" target="e_reason" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee2" value="Complaint / dispute" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="e_reason" target="e_r1" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee3" value="KYB overdue" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="e_reason" target="e_r2" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee4" value="User requested human" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="e_reason" target="e_r3" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee5" value="2 failed attempts" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="e_reason" target="e_r4" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee6" value="Investment advice" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="e_reason" target="e_r5" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee7" value="Pricing/enterprise" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="e_reason" target="e_r6" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee8" value="Account-specific" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="e_reason" target="e_r7" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee9" edge="1" source="e_r1" target="e_high" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee10" edge="1" source="e_r2" target="e_high" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee11" edge="1" source="e_r3" target="e_normal" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee12" edge="1" source="e_r4" target="e_normal" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee13" edge="1" source="e_r5" target="e_normal" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee14" edge="1" source="e_r6" target="e_normal" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee15" edge="1" source="e_r7" target="e_normal" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee16" edge="1" source="e_high" target="e_capture" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee17" edge="1" source="e_normal" target="e_capture" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee18" edge="1" source="e_capture" target="e_summary" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee19" edge="1" source="e_summary" target="e_slack" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee20" edge="1" source="e_summary" target="e_email" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee21" edge="1" source="e_slack" target="e_user_msg" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee22" edge="1" source="e_email" target="e_user_msg" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ee23" edge="1" source="e_user_msg" target="e_end" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PAGE 6: COMPLIANCE & DISCLAIMER LOGIC                  -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <diagram id="d_compliance" name="6. Compliance Logic">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="cp_start" value="Any response being generated" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="30" width="280" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cp_q1" value="Does response mention&#xa;yield, returns, or investing?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="350" y="150" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cp_d1" value="Append disclaimer:&#xa;&quot;Your capital is at risk.&#xa;Consult a qualified financial advisor.&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;" vertex="1" parent="1">
+          <mxGeometry x="740" y="165" width="280" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cp_q2" value="Does response mention&#xa;regulation or FCA status?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="350" y="330" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cp_d2" value="Include:&#xa;Round Financial Ltd FRN 995009&#xa;Appointed rep of Wealthkernel FRN 723719&#xa;ISO 27001:2022 certified" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;" vertex="1" parent="1">
+          <mxGeometry x="740" y="345" width="280" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cp_q3" value="Does response mention&#xa;data or bank credentials?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="350" y="510" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cp_d3" value="Include:&#xa;Credentials never stored&#xa;Open Banking compliant · 2FA required&#xa;No data sold to third parties" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;" vertex="1" parent="1">
+          <mxGeometry x="740" y="525" width="280" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cp_out" value="Response sent to user" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="390" y="700" width="260" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Edges -->
+        <mxCell id="cpe1" edge="1" source="cp_start" target="cp_q1" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="cpe2" value="Yes" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="cp_q1" target="cp_d1" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="cpe3" value="No" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="cp_q1" target="cp_q2" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="cpe4" edge="1" source="cp_d1" target="cp_q2" parent="1">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="880" y="280" /><mxPoint x="880" y="310" /><mxPoint x="500" y="310" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="cpe5" value="Yes" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="cp_q2" target="cp_d2" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="cpe6" value="No" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="cp_q2" target="cp_q3" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="cpe7" edge="1" source="cp_d2" target="cp_q3" parent="1">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="880" y="470" /><mxPoint x="880" y="490" /><mxPoint x="500" y="490" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="cpe8" value="Yes" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="cp_q3" target="cp_d3" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="cpe9" value="No" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="cp_q3" target="cp_out" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="cpe10" edge="1" source="cp_d3" target="cp_out" parent="1">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="880" y="650" /><mxPoint x="880" y="670" /><mxPoint x="520" y="670" /></Array></mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PAGE 7: SESSION STATE MACHINE                          -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <diagram id="d_state" name="7. Session State Machine">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- States -->
+        <mxCell id="s_init" value="" style="ellipse;aspect=fixed;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="550" y="20" width="40" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_greeting" value="Greeting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="480" y="110" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_sega" value="Segment A&#xa;Prospect" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="100" y="260" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_segb" value="Segment B&#xa;Active Client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="490" y="260" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_segc" value="Segment C&#xa;Established Client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="880" y="260" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_resolved" value="Resolved" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="420" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_followup" value="Follow-Up" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="850" y="420" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_escalated" value="Escalated" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="140" y="420" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_handoff" value="Human Handoff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="140" y="570" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_csat" value="CSAT Survey" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="480" y="700" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_end" value="" style="ellipse;aspect=fixed;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;" vertex="1" parent="1">
+          <mxCell id="s_end_inner" value="" style="ellipse;aspect=fixed;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;" vertex="1" parent="1">
+            <mxGeometry x="5" y="5" width="20" height="20" as="geometry" />
+          </mxCell>
+          <mxGeometry x="545" y="810" width="70" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Transitions -->
+        <mxCell id="se1" edge="1" source="s_init" target="s_greeting" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se2" value="Selects Prospect" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_greeting" target="s_sega" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se3" value="Selects Active Client" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_greeting" target="s_segb" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se4" value="Selects Established Client" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_greeting" target="s_segc" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="se5" value="Query answered" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_sega" target="s_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se6" value="Query answered" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_segb" target="s_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se7" value="Query answered" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_segc" target="s_resolved" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="se8" value="Cannot resolve /&#xa;complaint / KYB overdue" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_sega" target="s_escalated" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se9" value="Cannot resolve" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_segb" target="s_escalated" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se10" value="Cannot resolve" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_segc" target="s_escalated" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="se11" value="Another question" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_resolved" target="s_followup" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se12" value="Re-enters segment" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_followup" target="s_segb" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se13" value="Types 'main menu'" style="edgeStyle=orthogonalEdgeStyle;curved=1;" edge="1" source="s_followup" target="s_greeting" parent="1">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="940" y="370" /><mxPoint x="940" y="140" /></Array></mxGeometry>
+        </mxCell>
+
+        <mxCell id="se14" value="User is done" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_resolved" target="s_csat" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="se15" value="Rep notified via Slack + email" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_escalated" target="s_handoff" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se16" value="Session complete" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="s_handoff" target="s_csat" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="se17" edge="1" source="s_csat" target="s_end" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+</mxfile>

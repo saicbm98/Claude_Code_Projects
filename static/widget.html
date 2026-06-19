@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rondo — Round Treasury Chat</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f4f8;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 1rem;
+    }
+
+    .chat-container {
+      width: 100%;
+      max-width: 680px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.12);
+      display: flex;
+      flex-direction: column;
+      height: 80vh;
+      min-height: 500px;
+      overflow: hidden;
+    }
+
+    .chat-header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+      color: #fff;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #3b82f6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .chat-header h1 { font-size: 1rem; font-weight: 600; }
+    .chat-header p  { font-size: 0.75rem; opacity: 0.7; margin-top: 1px; }
+
+    .badge {
+      margin-left: auto;
+      background: #22c55e;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.875rem;
+      scroll-behavior: smooth;
+    }
+
+    .message {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      max-width: 88%;
+    }
+
+    .message.user  { align-self: flex-end; flex-direction: row-reverse; }
+    .message.bot   { align-self: flex-start; }
+
+    .bubble {
+      padding: 0.65rem 0.9rem;
+      border-radius: 12px;
+      font-size: 0.875rem;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .message.user .bubble {
+      background: #3b82f6;
+      color: #fff;
+      border-bottom-right-radius: 3px;
+    }
+
+    .message.bot .bubble {
+      background: #f1f5f9;
+      color: #1e293b;
+      border-bottom-left-radius: 3px;
+    }
+
+    .bubble .disclaimer {
+      margin-top: 0.5rem;
+      padding: 0.4rem 0.6rem;
+      background: #fef9c3;
+      border-left: 3px solid #eab308;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      color: #713f12;
+    }
+
+    .msg-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .message.bot  .msg-avatar { background: #dbeafe; }
+    .message.user .msg-avatar { background: #3b82f6; color: #fff; }
+
+    .typing-indicator span {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      background: #94a3b8;
+      border-radius: 50%;
+      margin: 0 2px;
+      animation: bounce 1.2s infinite;
+    }
+    .typing-indicator span:nth-child(2) { animation-delay: .2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: .4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40%           { transform: translateY(-6px); }
+    }
+
+    .input-row {
+      display: flex;
+      padding: 0.875rem;
+      gap: 0.5rem;
+      border-top: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+
+    .input-row textarea {
+      flex: 1;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 0.6rem 0.8rem;
+      font-size: 0.875rem;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      line-height: 1.4;
+      max-height: 120px;
+      transition: border-color .2s;
+    }
+
+    .input-row textarea:focus { border-color: #3b82f6; }
+
+    .send-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: #3b82f6;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background .15s;
+      align-self: flex-end;
+    }
+
+    .send-btn:hover  { background: #2563eb; }
+    .send-btn:active { background: #1d4ed8; }
+    .send-btn svg    { width: 18px; height: 18px; fill: #fff; }
+
+    .escalation-notice {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: #fff7ed;
+      border: 1px solid #fb923c;
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.78rem;
+      color: #9a3412;
+      margin-top: 0.25rem;
+    }
+
+    .session-info {
+      padding: 0.4rem 1.25rem;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      font-size: 0.7rem;
+      color: #94a3b8;
+      display: flex;
+      gap: 1rem;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+<div class="chat-container">
+  <div class="chat-header">
+    <div class="avatar">🤖</div>
+    <div>
+      <h1>Rondo</h1>
+      <p>Round Treasury Onboarding Assistant</p>
+    </div>
+    <span class="badge" id="onlineStatus">Online</span>
+  </div>
+
+  <div class="messages" id="messages"></div>
+
+  <div class="session-info">
+    <span id="segmentLabel">Segment: —</span>
+    <span id="sessionIdLabel">Session: —</span>
+  </div>
+
+  <div class="input-row">
+    <textarea
+      id="msgInput"
+      placeholder="Type a message…"
+      rows="1"
+      autocomplete="off"
+    ></textarea>
+    <button class="send-btn" id="sendBtn" title="Send">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  const API_BASE = '';  // same-origin
+  let sessionId = null;
+  let isStreaming = false;
+
+  const messagesEl  = document.getElementById('messages');
+  const inputEl     = document.getElementById('msgInput');
+  const sendBtn     = document.getElementById('sendBtn');
+  const segmentEl   = document.getElementById('segmentLabel');
+  const sessionIdEl = document.getElementById('sessionIdLabel');
+
+  const SEGMENT_LABELS = { A: 'Prospect', B: 'Active Client', C: 'Established Client' };
+
+  function scrollBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function appendMessage(role, text) {
+    const wrap = document.createElement('div');
+    wrap.className = `message ${role}`;
+
+    const avatarEl = document.createElement('div');
+    avatarEl.className = 'msg-avatar';
+    avatarEl.textContent = role === 'bot' ? '🤖' : '👤';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+
+    wrap.appendChild(avatarEl);
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    scrollBottom();
+    return bubble;
+  }
+
+  function showTyping() {
+    const wrap = document.createElement('div');
+    wrap.className = 'message bot';
+    wrap.id = 'typing';
+
+    const avatarEl = document.createElement('div');
+    avatarEl.className = 'msg-avatar';
+    avatarEl.textContent = '🤖';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble typing-indicator';
+    bubble.innerHTML = '<span></span><span></span><span></span>';
+
+    wrap.appendChild(avatarEl);
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    scrollBottom();
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typing');
+    if (el) el.remove();
+  }
+
+  function showEscalationNotice() {
+    const notice = document.createElement('div');
+    notice.className = 'escalation-notice';
+    notice.innerHTML = '🔔 <strong>Escalated</strong> — the Round team has been notified and will follow up shortly.';
+    messagesEl.appendChild(notice);
+    scrollBottom();
+  }
+
+  function updateSessionInfo(data) {
+    if (data.session_id) {
+      sessionId = data.session_id;
+      sessionIdEl.textContent = `Session: ${sessionId.slice(0, 8)}…`;
+    }
+    if (data.segment) {
+      segmentEl.textContent = `Segment: ${SEGMENT_LABELS[data.segment] || data.segment}`;
+    }
+  }
+
+  async function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text || isStreaming) return;
+
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    isStreaming = true;
+    sendBtn.disabled = true;
+
+    appendMessage('user', text);
+    showTyping();
+
+    try {
+      const resp = await fetch(`${API_BASE}/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, message: text }),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let botBubble = null;
+      let escalated = false;
+
+      removeTyping();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            const chunk = line.slice(5).trim();
+            if (chunk) {
+              if (!botBubble) {
+                botBubble = appendMessage('bot', '');
+              }
+              botBubble.textContent += chunk;
+              scrollBottom();
+            }
+          } else if (line.startsWith('event:')) {
+            const eventName = line.slice(6).trim();
+            if (eventName === 'done') {
+              // next data line has the JSON summary
+            } else if (eventName === 'error') {
+              if (botBubble) {
+                botBubble.textContent += '\n[Error — please try again]';
+              }
+            }
+          } else if (line.startsWith('data:') && buffer.includes('"escalated":true')) {
+            escalated = true;
+          }
+        }
+
+        // Parse done event data
+        const doneMatch = buffer.match(/"escalated"\s*:\s*true/);
+        if (doneMatch) escalated = true;
+      }
+
+      // Parse the done event from whatever was buffered
+      const jsonMatch = (buffer + lines.join('\n')).match(/\{.*"session_id".*\}/s);
+      if (jsonMatch) {
+        try {
+          const summary = JSON.parse(jsonMatch[0]);
+          updateSessionInfo(summary);
+          if (summary.escalated && !document.querySelector('.escalation-notice')) {
+            showEscalationNotice();
+          }
+        } catch {}
+      }
+
+    } catch (err) {
+      removeTyping();
+      appendMessage('bot', `Sorry, something went wrong: ${err.message}. Please try again.`);
+    } finally {
+      isStreaming = false;
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+  }
+
+  // Auto-resize textarea
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+  });
+
+  // Send on Enter (Shift+Enter = newline)
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+
+  // Initial greeting on load
+  window.addEventListener('load', async () => {
+    showTyping();
+    try {
+      const resp = await fetch(`${API_BASE}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: null, message: 'hello' }),
+      });
+      const data = await resp.json();
+      removeTyping();
+      appendMessage('bot', data.response);
+      updateSessionInfo(data);
+    } catch {
+      removeTyping();
+      appendMessage('bot', "Hi! I'm Rondo, Round Treasury's onboarding assistant. How can I help you today?");
+    }
+  });
+</script>
+</body>
+</html>

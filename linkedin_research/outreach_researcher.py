@@ -95,6 +95,11 @@ PPLX_ENDPOINT = "https://api.perplexity.ai/v1/responses"
 # the Agent API has no max_results param; it is the count we ask the model for in
 # the instructions (see research_instructions). All people_search models below
 # are from the live docs' supported list; tweak freely.
+# `max_output_tokens` is the RESPONSE generation budget (distinct from the
+# people_search/web_search context budgets). It must be large enough for the full
+# JSON array to finish: each person object is ~80-150 tokens, plus the model's
+# reasoning tokens count against this budget too, so we size it generously per
+# tier — otherwise the array gets truncated mid-object (the bug this fixes).
 DEPTH_CONFIG = {
     "Low": {
         "model": "openai/gpt-5-mini",
@@ -103,6 +108,7 @@ DEPTH_CONFIG = {
         "max_steps": 4,
         "people_tokens": 8000,
         "max_people": 15,
+        "max_output_tokens": 8000,
     },
     "Medium": {
         "model": "openai/gpt-5",
@@ -111,6 +117,7 @@ DEPTH_CONFIG = {
         "max_steps": 7,
         "people_tokens": 16000,
         "max_people": 30,
+        "max_output_tokens": 16000,
     },
     "High": {
         "model": "openai/gpt-5.5",
@@ -119,6 +126,7 @@ DEPTH_CONFIG = {
         "max_steps": 10,
         "people_tokens": 28000,
         "max_people": 50,
+        "max_output_tokens": 32000,
     },
 }
 
@@ -194,6 +202,8 @@ def call_perplexity(api_key: str, depth: str, instructions: str, query: str) -> 
         "input": query,
         "reasoning": {"effort": cfg["effort"]},
         "max_steps": cfg["max_steps"],
+        # Response generation budget — must fit the full JSON array (see config).
+        "max_output_tokens": cfg["max_output_tokens"],
         "tools": [
             {
                 "type": "people_search",
@@ -258,14 +268,17 @@ def _first_json_array(text: str) -> str | None:
     return None
 
 
-def _parse_people_json(text: str) -> list[dict]:
-    """Extract the people array from the model's text, tolerating code fences and
-    surrounding prose."""
-    if not text:
-        return []
+def _strip_fences(text: str) -> str:
     t = text.strip()
     t = re.sub(r"^```(?:json)?\s*", "", t)
     t = re.sub(r"\s*```$", "", t).strip()
+    return t
+
+
+def _strict_people_json(text: str) -> list[dict]:
+    """Parse a COMPLETE, well-formed people array (or {key: [...]} wrapper).
+    Returns [] if the JSON does not fully parse."""
+    t = _strip_fences(text)
     for candidate in (t, _first_json_array(t)):
         if not candidate:
             continue
@@ -281,6 +294,59 @@ def _parse_people_json(text: str) -> list[dict]:
                 if isinstance(v, list):
                     return [d for d in v if isinstance(d, dict)]
     return []
+
+
+def _recover_objects(text: str) -> list[dict]:
+    """Salvage every COMPLETE top-level {...} object from a (possibly truncated)
+    string, ignoring the final incomplete one. String-aware brace matching so
+    braces/quotes inside string values don't confuse the scan."""
+    objs: list[dict] = []
+    depth = 0
+    start: int | None = None
+    in_str = False
+    esc = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    frag = text[start:i + 1]
+                    try:
+                        d = json.loads(frag)
+                        if isinstance(d, dict):
+                            objs.append(d)
+                    except Exception:
+                        pass
+                    start = None
+    return objs
+
+
+def parse_people(text: str) -> tuple[list[dict], bool]:
+    """Return (people, partial). `partial` is True when the response could not be
+    parsed as complete JSON and we recovered whatever individual objects did
+    finish (i.e. the response was cut short)."""
+    if not text:
+        return [], False
+    people = _strict_people_json(text)
+    if people:
+        return people, False
+    # Truncated / malformed: salvage the complete objects that did come through.
+    recovered = _recover_objects(_strip_fences(text))
+    return recovered, bool(recovered)
 
 
 def _gather_raw_sources(resp: dict) -> list[dict]:
@@ -337,17 +403,19 @@ def _normalise_person(p: dict, raw_sources: list[dict]) -> dict:
 
 def discover_people(api_key: str, company: str, personas: list[str],
                     depth: str, context: str) -> tuple[list[dict], str]:
-    """Run discovery. Returns (candidates, raw_assistant_text)."""
+    """Run discovery. Returns (candidates, raw_assistant_text, partial).
+    `partial` is True when the response was cut short and we recovered only the
+    candidates that fully completed."""
     instructions = research_instructions(company, DEPTH_CONFIG[depth]["max_people"])
     query = build_research_query(company, personas, context)
     resp = call_perplexity(api_key, depth, instructions, query)
     text = _output_text(resp)
     raw_sources = _gather_raw_sources(resp)
-    people = _parse_people_json(text)
+    people, partial = parse_people(text)
     candidates = [_normalise_person(p, raw_sources) for p in people]
     # Drop entries with no name at all; keep order (best matches first).
     candidates = [c for c in candidates if c["name"]]
-    return candidates, text
+    return candidates, text, partial
 
 
 # --------------------------------------------------------------------------- #
@@ -1057,10 +1125,11 @@ def main() -> None:
             ss.or_personas = personas
             ss.or_depth = depth
             ss.or_context = context
+            partial = False
             with st.spinner(f"Researching prospects at {company.strip()} via "
                             f"Perplexity ({depth} depth)…"):
                 try:
-                    candidates, raw_text = discover_people(
+                    candidates, raw_text, partial = discover_people(
                         pplx_key, company.strip(), personas, depth, context)
                     ss.or_candidates = candidates
                     ss.or_raw_text = raw_text
@@ -1072,7 +1141,14 @@ def main() -> None:
                 except Exception as exc:
                     st.error(f"Discovery failed: {exc}")
             if ss.or_candidates:
-                st.success(f"Found {len(ss.or_candidates)} candidate(s).")
+                if partial:
+                    st.warning(
+                        "Response was cut short, showing the "
+                        f"{len(ss.or_candidates)} candidate(s) that did come "
+                        "through. Try a lower research depth for a complete list, "
+                        "or scrape these and re-run for more.")
+                else:
+                    st.success(f"Found {len(ss.or_candidates)} candidate(s).")
             elif ss.or_raw_text:
                 st.warning("No structured candidates parsed from the response. "
                            "See the raw response below and try refining your "

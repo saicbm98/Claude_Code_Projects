@@ -30,6 +30,7 @@ Secrets (read from st.secrets, never hardcoded):
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
@@ -39,6 +40,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Make the sibling modules (actors.py, research_person.py, chat_researcher.py)
 # importable regardless of the working directory. On Streamlit Community Cloud
@@ -50,9 +52,13 @@ if _HERE not in sys.path:
 
 from actors import ApifyClient, ApifyError  # noqa: E402
 from research_person import (  # noqa: E402
+    _engagement,
+    _exp_dates,
+    _item_type,
+    _text,
+    _url,
     activity_note,
     fmt_field,
-    render_markdown,
     scrape_activity_tiered,
     slugify,
     split_name,
@@ -81,32 +87,38 @@ CHAT_MODEL = "claude-sonnet-4-6"
 # at https://docs.perplexity.ai/docs/agent-api/quickstart (June 2026).
 PPLX_ENDPOINT = "https://api.perplexity.ai/v1/responses"
 
-# Research depth -> Perplexity behaviour. Depth primarily drives the web_search
+# Research depth -> Perplexity behaviour. Depth drives the web_search
 # `search_context_size` (low/medium/high, the documented token budgets), and we
-# also scale the model tier, reasoning effort, agent steps and people_search
-# token budget so "High" really is deeper. All people_search models below are
-# from the live docs' supported list; tweak freely.
+# also scale the model tier, reasoning effort, agent steps, the people_search
+# token budget, and `max_people` (the requested number of results) so "High"
+# really is deeper AND returns more people. `max_people` is NOT an API limit —
+# the Agent API has no max_results param; it is the count we ask the model for in
+# the instructions (see research_instructions). All people_search models below
+# are from the live docs' supported list; tweak freely.
 DEPTH_CONFIG = {
     "Low": {
         "model": "openai/gpt-5-mini",
         "search_context_size": "low",
         "effort": "low",
         "max_steps": 4,
-        "people_tokens": 6000,
+        "people_tokens": 8000,
+        "max_people": 15,
     },
     "Medium": {
         "model": "openai/gpt-5",
         "search_context_size": "medium",
         "effort": "medium",
-        "max_steps": 6,
-        "people_tokens": 10000,
+        "max_steps": 7,
+        "people_tokens": 16000,
+        "max_people": 30,
     },
     "High": {
         "model": "openai/gpt-5.5",
         "search_context_size": "high",
         "effort": "high",
-        "max_steps": 8,
-        "people_tokens": 16000,
+        "max_steps": 10,
+        "people_tokens": 28000,
+        "max_people": 50,
     },
 }
 
@@ -126,6 +138,8 @@ CSV_COLUMNS = [
 ]
 
 CONSULTANT_NAME = "Sara"  # BCC reminder target in the drafting chat.
+
+log = logging.getLogger("outreach_researcher")
 
 
 # --------------------------------------------------------------------------- #
@@ -148,21 +162,26 @@ def build_research_query(company: str, personas: list[str], context: str) -> str
     return " ".join(parts)
 
 
-def research_instructions(company: str) -> str:
+def research_instructions(company: str, max_people: int) -> str:
     """System-level instructions for the Perplexity agent. Forces strict JSON so
-    the result parses cleanly into the candidate table."""
+    the result parses cleanly into the candidate table. `max_people` is the
+    requested result count (depth-dependent); it is the only cap on how many
+    people come back, so it is passed in rather than hard-coded."""
     return (
         "You are a people-research assistant for a job-search outreach workflow. "
         f"Use the people_search and web_search tools to find REAL, named people "
         f"who currently work at {company} and match the user's requested personas "
-        "and constraints. Verify with searches; never invent people or URLs.\n\n"
+        "and constraints. Verify with searches; never invent people or URLs. "
+        "Run multiple searches and keep going until you have found as many "
+        f"matching people as you can, up to {max_people}.\n\n"
         "Return your final answer as STRICT JSON ONLY: a single JSON array, with "
         "no prose and no markdown code fences. Each element must be an object with "
         "exactly these keys:\n"
         '  "name", "title", "location", "background", "linkedin_url"\n'
         "Use an empty string for any field you could not establish. Keep "
-        '"background" to one or two factual sentences. Include up to 12 people, '
-        "best matches first. If you genuinely find no one, return an empty array []."
+        f'"background" to one or two factual sentences. Return up to {max_people} '
+        "people, best matches first. If you genuinely find no one, return an "
+        "empty array []."
     )
 
 
@@ -319,7 +338,7 @@ def _normalise_person(p: dict, raw_sources: list[dict]) -> dict:
 def discover_people(api_key: str, company: str, personas: list[str],
                     depth: str, context: str) -> tuple[list[dict], str]:
     """Run discovery. Returns (candidates, raw_assistant_text)."""
-    instructions = research_instructions(company)
+    instructions = research_instructions(company, DEPTH_CONFIG[depth]["max_people"])
     query = build_research_query(company, personas, context)
     resp = call_perplexity(api_key, depth, instructions, query)
     text = _output_text(resp)
@@ -343,6 +362,129 @@ def _role_from_profile(profile: dict | None, fallback_title: str,
                          "location.parsed.text", "location")
     return (" | ".join(x for x in (headline, location) if x)
             or " | ".join(x for x in (fallback_title, fallback_location) if x))
+
+
+# --- Robust profile rendering ---------------------------------------------- #
+# The shared render_markdown/render_profile_section in research_person.py reads
+# only `experience` / `currentPosition` / `about`. If the harvestapi actor's
+# output key names drift, that section silently goes blank. The renderer below
+# tries every plausible key spelling so career history survives such drift.
+def _first_nonempty_list(profile: dict, *keys: str) -> list:
+    for k in keys:
+        v = profile.get(k)
+        if isinstance(v, list) and v:
+            return v
+    return []
+
+
+def _exp_entry_md(e: dict) -> list[str]:
+    title = fmt_field(e, "position", "title", "role", "jobTitle") or "(role n/a)"
+    company = fmt_field(e, "companyName", "company", "company.name",
+                        "organisation", "organization")
+    head = title + (f" — {company}" if company else "")
+    lines = [f"### {head}"]
+    meta = " · ".join(x for x in (
+        _exp_dates(e) or fmt_field(e, "dateRange", "duration", "period"),
+        fmt_field(e, "employmentType", "employment_type"),
+        fmt_field(e, "location", "locationName"),
+    ) if x)
+    if meta:
+        lines += ["", f"_{meta}_"]
+    desc = fmt_field(e, "description", "summary")
+    if desc:
+        lines += ["", desc.strip()]
+    lines.append("")
+    return lines
+
+
+def _edu_entry_md(e: dict) -> str:
+    school = fmt_field(e, "schoolName", "school", "school.name", "institution",
+                       "title") or "(school n/a)"
+    degree = " ".join(x for x in (
+        fmt_field(e, "degree", "degreeName"),
+        fmt_field(e, "fieldOfStudy", "field"),
+    ) if x)
+    dates = _exp_dates(e) or fmt_field(e, "dateRange", "period")
+    tail = " · ".join(x for x in (degree, dates) if x)
+    return f"- **{school}**" + (f" — {tail}" if tail else "")
+
+
+def render_profile_section_md(profile: dict | None) -> list[str]:
+    """Markdown lines for current role + about + full career history + education,
+    tolerant of varied Apify output key names."""
+    if not profile:
+        return []
+    experience = _first_nonempty_list(
+        profile, "experience", "experiences", "positions",
+        "workExperience", "positionHistory", "jobs")
+    education = _first_nonempty_list(
+        profile, "education", "educations", "schools", "educationHistory")
+    current = _first_nonempty_list(
+        profile, "currentPosition", "currentPositions", "current")
+    about = fmt_field(profile, "about", "summary", "description", "bio")
+
+    lines = ["## Profile & career history", ""]
+    cur = current[0] if current else (experience[0] if experience else None)
+    if cur:
+        title = fmt_field(cur, "position", "title", "role", "jobTitle")
+        company = fmt_field(cur, "companyName", "company", "company.name")
+        cur_line = " at ".join(x for x in (title, company) if x)
+        if cur_line:
+            lines += [f"**Current role:** {cur_line}", ""]
+    if about:
+        lines += ["**About:**", "", about.strip(), ""]
+    if experience:
+        lines += ["**Career history:**", ""]
+        for e in experience:
+            lines += _exp_entry_md(e)
+    if education:
+        lines += ["**Education:**", ""]
+        for e in education:
+            lines.append(_edu_entry_md(e))
+        lines.append("")
+    if len(lines) == 2:  # header only -> nothing renderable was found
+        lines += ["_No structured career history found in the scrape result._", ""]
+    lines += ["---", ""]
+    return lines
+
+
+def build_report_md(name: str, role: str, profile_url: str, since, rows,
+                    profile: dict | None, window_note: str | None) -> str:
+    """Self-contained report: header + robust profile section + recent activity.
+    Mirrors the Activity Researcher layout but uses the robust profile section so
+    career history is not lost to output-key drift."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines = [
+        f"# Public activity: {name}", "",
+        f"- **Profile:** {profile_url}",
+        f"- **Current role:** {role or 'n/a'}",
+    ]
+    if window_note:
+        lines.append(f"- **{window_note}**")
+    lines += [
+        f"- **Window scanned:** since {since.date().isoformat()} (newest first)",
+        f"- **Items found:** {len(rows)}",
+        f"- **Generated:** {now}",
+        "",
+        "> Source: LinkedIn via Apify (harvestapi). Profile/career history plus "
+        "posts and reposts by the profile.",
+        "", "---", "",
+    ]
+    lines += render_profile_section_md(profile)
+    lines += ["## Recent activity", ""]
+    if not rows:
+        lines.append(f"_{window_note or 'No posts or reposts found.'}_")
+        return "\n".join(lines)
+    for dt, it in rows:
+        date_str = dt.date().isoformat() if dt else "date n/a"
+        lines += [
+            f"## {date_str} - {_item_type(it)}", "",
+            _text(it).strip(), "",
+            f"- **Engagement:** {_engagement(it)}",
+            f"- **URL:** {_url(it) or 'n/a'}",
+            "", "---", "",
+        ]
+    return "\n".join(lines)
 
 
 def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
@@ -382,6 +524,17 @@ def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
     else:
         profile_err = ""
 
+    # Log the raw Apify profile response so we can confirm whether career history
+    # is present in the scrape (and under which keys) vs lost during formatting.
+    if profile is not None:
+        try:
+            log.info("Raw Apify profile for %s — top-level keys: %s",
+                     name, sorted(profile.keys()))
+            log.info("Raw Apify profile JSON for %s: %s",
+                     name, json.dumps(profile)[:4000])
+        except Exception:
+            pass
+
     # 2) Recent posts/reposts, widening the window if empty. (posts actor)
     try:
         rows, used_days, since = scrape_activity_tiered(apify, clean_url, MAX_POSTS)
@@ -393,7 +546,7 @@ def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
     display_name = (fmt_field(profile or {}, "name", "fullName") or name)
     role = _role_from_profile(profile, person.get("title", ""),
                               person.get("location", ""))
-    md = render_markdown(display_name, role, clean_url, since, rows,
+    md = build_report_md(display_name, role, clean_url, since, rows,
                          profile=profile, window_note=note)
 
     return {
@@ -405,6 +558,7 @@ def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
         "post_count": len(rows),
         "note": note,
         "profile_err": profile_err,
+        "raw_profile": profile,   # kept for the in-app debug view
     }
 
 
@@ -814,6 +968,40 @@ def init_state() -> None:
 # --------------------------------------------------------------------------- #
 # UI
 # --------------------------------------------------------------------------- #
+def render_copy_button(text: str, key: str) -> None:
+    """Small inline 'copy raw text' button. Copies the underlying raw report via
+    navigator.clipboard.writeText(); falls back to execCommand for sandboxed
+    iframes. No raw text is shown on the page."""
+    payload = json.dumps(text)          # safe JS string literal
+    safe_key = re.sub(r"\W+", "_", key) or "x"
+    bid = f"orcopy_{safe_key}"
+    html = f"""
+    <button id="{bid}" style="font-size:12px;padding:3px 10px;border:1px solid #ccc;
+        border-radius:6px;background:#f6f6f6;cursor:pointer;">📋 Copy raw text</button>
+    <span id="{bid}_m" style="font-size:12px;margin-left:8px;color:#1a7f37;"></span>
+    <script>
+    (function() {{
+      const btn = document.getElementById("{bid}");
+      const msg = document.getElementById("{bid}_m");
+      const text = {payload};
+      btn.addEventListener("click", async function() {{
+        try {{
+          await navigator.clipboard.writeText(text);
+          msg.textContent = "Copied!";
+        }} catch (e) {{
+          const ta = document.createElement("textarea");
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          try {{ document.execCommand("copy"); msg.textContent = "Copied!"; }}
+          catch (_) {{ msg.textContent = "Copy failed"; }}
+          document.body.removeChild(ta);
+        }}
+      }});
+    }})();
+    </script>
+    """
+    components.html(html, height=38)
+
+
 def main() -> None:
     st.set_page_config(page_title="NZ Outreach Researcher", page_icon="🇳🇿",
                        layout="wide")
@@ -975,11 +1163,15 @@ def main() -> None:
                     if s.get("profile_err"):
                         st.caption(f"(profile step note: {s['profile_err']})")
                     report = s.get("report_md", "(no content)")
-                    # Readable, formatted report (headers, bold, bullets).
+                    # Small, unobtrusive copy button (no raw markdown on the page).
+                    render_copy_button(report, key=name)
+                    # Clean, formatted report (headers, bold, bullets) — only this.
                     st.markdown(report)
-                    # Copy raw text below — st.code(..., language="") gives a
-                    # built-in copy icon; one click copies the full raw report.
-                    st.code(report, language="")
+                    # Debug: raw Apify profile JSON, to confirm scrape contents.
+                    if s.get("raw_profile"):
+                        with st.expander("🔧 Raw scrape data (debug)",
+                                         expanded=False):
+                            st.json(s["raw_profile"])
                 else:
                     st.error(s.get("error", "Scrape failed."))
 

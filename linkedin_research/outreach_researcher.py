@@ -778,54 +778,145 @@ def _sb_config() -> tuple[str, str, str] | None:
     return url, key, bucket
 
 
-def cloud_status() -> str:
-    return ("☁️ Synced to Supabase" if _sb_config()
-            else "💾 Local only — set SUPABASE_URL/KEY to sync across reboots")
+def _sb_object_url(url: str, bucket: str, name: str) -> str:
+    return f"{url}/storage/v1/object/{bucket}/{name}"
 
 
-def _sb_endpoint(url: str, bucket: str) -> str:
-    return f"{url}/storage/v1/object/{bucket}/{OBJECT_NAME}"
+def _sb_headers(key: str, extra: dict | None = None) -> dict:
+    # Supabase needs BOTH apikey and Authorization. service_role key for both.
+    h = {"Authorization": f"Bearer {key}", "apikey": key}
+    if extra:
+        h.update(extra)
+    return h
+
+
+def _sb_put_object(name: str, payload: bytes) -> tuple[bool, str]:
+    """Create/overwrite a Storage object. POST with x-upsert; if that 4xx-fails
+    (some setups don't honour x-upsert on POST for an existing key) retry with
+    PUT. Logs the full HTTP status + body for every attempt. Returns (ok, detail)."""
+    cfg = _sb_config()
+    if not cfg:
+        return False, "Supabase not configured"
+    url, key, bucket = cfg
+    target = _sb_object_url(url, bucket, name)
+    headers = _sb_headers(key, {"Content-Type": "application/json",
+                                "x-upsert": "true"})
+    try:
+        r = requests.post(target, headers=headers, data=payload, timeout=20)
+    except Exception as exc:
+        log.error("Supabase POST %s raised: %s", name, exc)
+        return False, f"network error on POST: {exc}"
+    log.info("Supabase POST %s (bucket=%s) -> HTTP %s: %s",
+             name, bucket, r.status_code, (r.text or "")[:600])
+    if r.status_code in (200, 201):
+        return True, "ok"
+
+    # Fallback: PUT (update an existing object).
+    try:
+        r2 = requests.put(target, headers=headers, data=payload, timeout=20)
+    except Exception as exc:
+        log.error("Supabase PUT %s raised: %s", name, exc)
+        return False, f"network error on PUT: {exc}"
+    log.info("Supabase PUT %s (bucket=%s) -> HTTP %s: %s",
+             name, bucket, r2.status_code, (r2.text or "")[:600])
+    if r2.status_code in (200, 201):
+        return True, "ok"
+    return False, (f"POST HTTP {r.status_code}: {(r.text or '')[:250]} | "
+                   f"PUT HTTP {r2.status_code}: {(r2.text or '')[:250]}")
+
+
+def _sb_get_object(name: str) -> tuple[int, str | None]:
+    """(status_code, body). status_code 0 = not configured, -1 = network error."""
+    cfg = _sb_config()
+    if not cfg:
+        return 0, None
+    url, key, bucket = cfg
+    try:
+        r = requests.get(_sb_object_url(url, bucket, name),
+                         headers=_sb_headers(key), timeout=20)
+    except Exception as exc:
+        log.error("Supabase GET %s raised: %s", name, exc)
+        return -1, None
+    log.info("Supabase GET %s (bucket=%s) -> HTTP %s", name, bucket, r.status_code)
+    return r.status_code, r.text
+
+
+def _sb_delete_object(name: str) -> tuple[int, str]:
+    cfg = _sb_config()
+    if not cfg:
+        return 0, ""
+    url, key, bucket = cfg
+    try:
+        r = requests.delete(_sb_object_url(url, bucket, name),
+                            headers=_sb_headers(key), timeout=20)
+    except Exception as exc:
+        log.error("Supabase DELETE %s raised: %s", name, exc)
+        return -1, str(exc)
+    log.info("Supabase DELETE %s (bucket=%s) -> HTTP %s: %s",
+             name, bucket, r.status_code, (r.text or "")[:300])
+    return r.status_code, r.text or ""
+
+
+def sb_health_check() -> tuple[bool, str]:
+    """Real end-to-end write-test: write a tiny object, read it back, delete it.
+    Returns (ok, detail). The sidebar status reflects THIS, not creds alone."""
+    cfg = _sb_config()
+    if not cfg:
+        return False, "not configured"
+    test_name = "__write_test__.json"
+    token = uuid.uuid4().hex
+    payload = json.dumps({"healthcheck": token}).encode("utf-8")
+
+    ok, detail = _sb_put_object(test_name, payload)
+    if not ok:
+        return False, f"write failed — {detail}"
+
+    code, body = _sb_get_object(test_name)
+    if code != 200:
+        return False, f"read-back failed — HTTP {code}: {(body or '')[:200]}"
+    try:
+        got = (json.loads(body) or {}).get("healthcheck")
+    except Exception:
+        got = None
+    if got != token:
+        return False, "read-back mismatch — object not persisting as written"
+
+    # Cleanup is best-effort; a delete failure does not fail the verdict.
+    _sb_delete_object(test_name)
+    return True, "ok"
+
+
+def get_sb_health(force: bool = False) -> tuple[bool, str]:
+    """Cached per session so the round-trip test runs once on startup."""
+    ss = st.session_state
+    if force or "or_sb_health" not in ss:
+        ss["or_sb_health"] = sb_health_check()
+    return ss["or_sb_health"]
 
 
 def _sb_download() -> tuple[bool, list[dict]]:
     """(ok, sessions). ok=False means configured but the fetch failed (so the
     caller should fall back to the local cache rather than assume empty)."""
-    cfg = _sb_config()
-    if not cfg:
+    if not _sb_config():
         return False, []
-    url, key, bucket = cfg
-    headers = {"Authorization": f"Bearer {key}", "apikey": key}
-    try:
-        r = requests.get(_sb_endpoint(url, bucket), headers=headers, timeout=20)
-    except Exception:
-        return False, []
-    if r.status_code == 200:
+    code, body = _sb_get_object(OBJECT_NAME)
+    if code == 200:
         try:
-            data = r.json()
-        except ValueError:
+            data = json.loads(body) if body else []
+        except Exception:
             return True, []
         return True, (data if isinstance(data, list) else [])
-    if r.status_code in (400, 404):
+    if code in (400, 404):
         return True, []  # object not created yet -> genuinely empty
     return False, []     # auth/other error -> let caller use local cache
 
 
 def _sb_upload(sessions: list[dict]) -> bool:
-    cfg = _sb_config()
-    if not cfg:
-        return False
-    url, key, bucket = cfg
-    headers = {
-        "Authorization": f"Bearer {key}", "apikey": key,
-        "Content-Type": "application/json", "x-upsert": "true",
-    }
     payload = json.dumps(sessions, ensure_ascii=False, indent=2).encode("utf-8")
-    try:
-        r = requests.post(_sb_endpoint(url, bucket), headers=headers,
-                          data=payload, timeout=20)
-        return r.status_code in (200, 201)
-    except Exception:
-        return False
+    ok, detail = _sb_put_object(OBJECT_NAME, payload)
+    if not ok:
+        log.error("Supabase upload of %s FAILED: %s", OBJECT_NAME, detail)
+    return ok
 
 
 def _read_local() -> list[dict]:
@@ -862,7 +953,9 @@ def load_history() -> list[dict]:
 def _write_history(sessions: list[dict]) -> None:
     _write_local(sessions)       # always keep a local cache
     if _sb_config():
-        _sb_upload(sessions)     # and push to the durable cloud store
+        if not _sb_upload(sessions):
+            log.error("History NOT synced to Supabase (see HTTP log above); "
+                      "kept local only.")
 
 
 def upsert_session(entry: dict) -> None:
@@ -964,7 +1057,23 @@ def render_history_sidebar() -> None:
             new_search()
             st.rerun()
         st.header("🗂️ Research history")
-        st.caption(cloud_status())
+        # Sync status reflects a real write/read/delete round-trip, not just
+        # whether credentials are present.
+        if _sb_config():
+            ok, detail = get_sb_health()
+            if ok:
+                st.caption("☁️ Synced to Supabase (write-test passed)")
+            else:
+                st.error(f"⚠️ Supabase sync FAILED: {detail}")
+                st.caption("Saving local-only until fixed. Check the bucket name, "
+                           "that the bucket exists, and that the service_role key "
+                           "has Storage write access.")
+                if st.button("↻ Recheck Supabase", key="or_sb_recheck",
+                             use_container_width=True):
+                    get_sb_health(force=True)
+                    st.rerun()
+        else:
+            st.caption("💾 Local only — set SUPABASE_URL/KEY to sync across reboots")
         sessions = sorted(load_history(),
                           key=lambda s: s.get("timestamp", ""), reverse=True)
         if not sessions:

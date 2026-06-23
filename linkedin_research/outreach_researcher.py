@@ -466,6 +466,27 @@ def _first_nonempty_list(profile: dict, *keys: str) -> list:
     return []
 
 
+def _has_career_history(profile: dict | None) -> bool:
+    """True if the profile dict actually carries career-history content. Used to
+    decide whether to fall back to Apify: Bright Data can return a record whose
+    experience/education/about/position are all null (see the NOTE on
+    brightdata_fetch_profile), and that must trigger the fallback too."""
+    if not profile:
+        return False
+    has_exp = bool(_first_nonempty_list(
+        profile, "experience", "experiences", "positions",
+        "workExperience", "positionHistory", "jobs"))
+    has_edu = bool(_first_nonempty_list(
+        profile, "education", "educations", "schools", "educationHistory"))
+    has_about = bool(fmt_field(profile, "about", "summary", "bio"))
+    has_pos = bool(
+        fmt_field(profile, "position")
+        or isinstance(profile.get("current_company"), dict)
+        or _first_nonempty_list(profile, "currentPosition", "currentPositions",
+                                "current"))
+    return has_exp or has_edu or has_about or has_pos
+
+
 def _entry_dates(e: dict) -> str:
     """Date range for one experience/education entry, across shapes:
     Apify (startDate.text/endDate.text), Bright Data (start_date/end_date or
@@ -564,9 +585,53 @@ def render_profile_section_md(profile: dict | None) -> list[str]:
     return lines
 
 
+def render_extras_md(profile: dict | None) -> list[str]:
+    """Certifications + recommendations from Bright Data (which returns these
+    well even when its career fields are null). Tolerant of field-name variants;
+    renders nothing when absent."""
+    if not profile:
+        return []
+    lines: list[str] = []
+    certs = _first_nonempty_list(profile, "certifications", "certification",
+                                 "licenses_and_certifications", "licenses")
+    if certs:
+        lines += ["## Certifications", ""]
+        for c in certs:
+            if not isinstance(c, dict):
+                lines.append(f"- {c}")
+                continue
+            title = fmt_field(c, "title", "name", "subtitle") or "(certification)"
+            issuer = fmt_field(c, "subtitle", "issuer", "organization",
+                               "authority", "company")
+            meta = fmt_field(c, "meta", "date", "issued", "credential_id")
+            tail = " · ".join(x for x in (issuer, meta) if x and x != title)
+            lines.append(f"- **{title}**" + (f" — {tail}" if tail else ""))
+        lines += ["", "---", ""]
+
+    recs = _first_nonempty_list(profile, "recommendations",
+                                "recommendations_received")
+    rec_count = fmt_field(profile, "recommendations_count")
+    if recs or rec_count:
+        lines += ["## Recommendations", ""]
+        if rec_count:
+            lines.append(f"_{rec_count} recommendation(s) received._")
+            lines.append("")
+        for r in (recs or [])[:5]:
+            if isinstance(r, dict):
+                txt = fmt_field(r, "text", "recommendation", "description", "body")
+                who = fmt_field(r, "name", "author", "recommender", "recommender_name")
+                if txt:
+                    lines.append(f"> {txt}" + (f"  \n> — {who}" if who else ""))
+            elif isinstance(r, str) and r.strip():
+                lines.append(f"> {r.strip()}")
+        lines += ["", "---", ""]
+    return lines
+
+
 def build_report_md(name: str, role: str, profile_url: str, since, rows,
                     profile: dict | None, window_note: str | None,
-                    profile_source: str | None = None) -> str:
+                    profile_source: str | None = None,
+                    extras_profile: dict | None = None) -> str:
     """Self-contained report: header + robust profile section + recent activity.
     Mirrors the Activity Researcher layout but uses the robust profile section so
     career history is not lost to output-key drift. `profile_source` names which
@@ -593,6 +658,9 @@ def build_report_md(name: str, role: str, profile_url: str, since, rows,
         "", "---", "",
     ]
     lines += render_profile_section_md(profile)
+    # Certifications + recommendations come from Bright Data (extras_profile)
+    # even when career history was sourced from Apify.
+    lines += render_extras_md(extras_profile)
     lines += ["## Recent activity", ""]
     if not rows:
         lines.append(f"_{window_note or 'No posts or reposts found.'}_")
@@ -610,6 +678,46 @@ def build_report_md(name: str, role: str, profile_url: str, since, rows,
 
 
 # --- Bright Data async profile fetch (PRIMARY) ----------------------------- #
+# NOTE on null career fields (experience/education/about/position)
+# -----------------------------------------------------------------
+# Observed: dataset gd_l1viktl72bvl7bjuj0 sometimes returns null for
+# experience / education / about / position while still returning activity,
+# certifications and recommendations. What was investigated/tried:
+#   1. Dataset id — gd_l1viktl72bvl7bjuj0 is the correct "LinkedIn people
+#      profile, collect by URL" dataset and its schema DOES include experience,
+#      education, about and position (per Bright Data docs). It is not a
+#      "basic vs full" split — there is no separate full-profile dataset id.
+#   2. Trigger parameters — Bright Data exposes no "include_work_experience"
+#      (or similar) flag on this dataset. The trigger body is simply
+#      [{"url": ...}]; the dataset returns every field it manages to scrape.
+#      (A separate "discover by name" trigger exists but takes names, not URLs,
+#      and returns the same record schema.)
+#   3. URL format — the docs' canonical form is https://www.linkedin.com/in/<id>
+#      (https, www, no query string, no country subdomain). Perplexity/Apify can
+#      hand us nz.linkedin.com/..., http://, or ?trk=... URLs, which can make the
+#      deep fields come back null. So we now normalise the URL to the canonical
+#      form before triggering (see _brightdata_profile_url).
+# Conclusion: when Bright Data still returns null career history for a profile,
+# Apify is used as the career-history source (see deep_scrape_person), while
+# Bright Data stays primary for the data it returns well (activity,
+# certifications, recommendations). Re-evaluate if Bright Data changes the
+# dataset behaviour.
+def _brightdata_profile_url(raw: str) -> str:
+    """Canonicalise a LinkedIn profile URL to the form Bright Data expects:
+    https://www.linkedin.com/in/<id> — strip query/fragment, force https + www,
+    drop country subdomains (e.g. nz.linkedin.com)."""
+    u = (raw or "").strip().split("?", 1)[0].split("#", 1)[0].rstrip("/")
+    if not u:
+        return u
+    u = re.sub(r"^http://", "https://", u, flags=re.I)
+    if not u.lower().startswith("https://"):
+        u = "https://" + u.lstrip("/")
+    # country subdomain (xx. / xxx.) or bare linkedin.com -> www.linkedin.com
+    u = re.sub(r"https://(?:[a-z]{2,3}\.)?linkedin\.com",
+               "https://www.linkedin.com", u, flags=re.I)
+    return u
+
+
 def brightdata_fetch_profile(profile_url: str) -> dict | None:
     """Fetch one LinkedIn profile via Bright Data's async Web Scraper API:
     trigger -> poll progress until 'ready' (or ~90s timeout) -> fetch snapshot.
@@ -621,13 +729,16 @@ def brightdata_fetch_profile(profile_url: str) -> dict | None:
         return None
     headers = {"Authorization": f"Bearer {key}",
                "Content-Type": "application/json"}
+    target_url = _brightdata_profile_url(profile_url)
+    log.info("Bright Data: requesting profile for normalised URL %s (from %s)",
+             target_url, profile_url)
 
     # 1) Trigger a collection for this profile URL.
     try:
         r = requests.post(
             BRIGHTDATA_TRIGGER_URL,
             params={"dataset_id": BRIGHTDATA_PROFILE_DATASET_ID, "format": "json"},
-            headers=headers, json=[{"url": profile_url}], timeout=30)
+            headers=headers, json=[{"url": target_url}], timeout=30)
     except Exception as exc:
         log.error("Bright Data TRIGGER raised for %s: %s", profile_url, exc)
         return None
@@ -700,10 +811,16 @@ def brightdata_fetch_profile(profile_url: str) -> dict | None:
 
 
 def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
-    """Deep-scrape one selected person. Profile data (career history, education,
-    about, current position) comes from Bright Data PRIMARY, with the existing
-    Apify deep-profile-scrape as automatic fallback when Bright Data fails or
-    times out. Posts ALWAYS come from Apify (harvestapi) — untouched.
+    """Deep-scrape one selected person.
+
+    Bright Data is PRIMARY for profile data (and the data it returns well —
+    certifications, recommendations). Career history specifically (experience /
+    education / about / current position) falls back to the existing Apify
+    deep-profile-scrape whenever Bright Data fails, times out, OR returns a
+    record with those fields null (a known behaviour of dataset
+    gd_l1viktl72bvl7bjuj0 — see the NOTE on brightdata_fetch_profile).
+
+    Posts ALWAYS come from Apify (harvestapi) — untouched.
 
     If the discovery step did not yield a LinkedIn URL, we first resolve one by
     name (cheap search actor) before scraping — reusing the existing resolve
@@ -727,33 +844,41 @@ def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
 
     clean_url = url.rstrip("/")
 
-    # 1) Full profile (career history / education / about / current position):
-    #    Bright Data PRIMARY -> Apify deep-profile-scrape FALLBACK.
-    profile = None
-    profile_source = None   # "Bright Data" | "Apify fallback" | None
+    # 1) Profile. Bright Data PRIMARY; Apify fills in career history when Bright
+    #    Data lacks it (failure/timeout OR null career fields).
+    bd_profile = brightdata_fetch_profile(clean_url)
+    apify_profile = None
     profile_err = ""
-    profile = brightdata_fetch_profile(clean_url)
-    if profile:
-        profile_source = "Bright Data"
-    else:
-        # Bright Data failed/timed out -> fall back to the existing Apify scrape.
+    if not _has_career_history(bd_profile):
         try:
-            profile = scrape_profile(apify, clean_url)
-            if profile:
-                profile_source = "Apify fallback"
+            apify_profile = scrape_profile(apify, clean_url)
         except ApifyError as exc:
-            profile = None
+            apify_profile = None
             profile_err = str(exc)
 
-    # Log the raw profile so we can confirm career history is present (and under
-    # which keys) vs lost during formatting — works for either source.
-    if profile is not None:
-        try:
-            log.info("Profile for %s via %s — top-level keys: %s",
-                     name, profile_source, sorted(profile.keys()))
-            log.info("Raw profile JSON for %s: %s", name, json.dumps(profile)[:4000])
-        except Exception:
-            pass
+    # Choose the career-history source (the dict rendered for experience/
+    # education/about/current). Prefer whichever actually has the data.
+    if _has_career_history(apify_profile):
+        career_profile, career_source = apify_profile, "Apify"
+    elif _has_career_history(bd_profile):
+        career_profile, career_source = bd_profile, "Bright Data"
+    else:
+        career_profile = bd_profile or apify_profile
+        career_source = ("Bright Data" if bd_profile
+                         else ("Apify" if apify_profile else None))
+    # Certifications/recommendations come from Bright Data when present.
+    extras_profile = bd_profile
+    extras_source = "Bright Data" if (bd_profile and render_extras_md(bd_profile)) else None
+
+    for label, prof in (("Bright Data", bd_profile), ("Apify", apify_profile)):
+        if prof is not None:
+            try:
+                log.info("Profile for %s via %s — keys: %s | has_career=%s",
+                         name, label, sorted(prof.keys()), _has_career_history(prof))
+                log.info("Raw %s profile JSON for %s: %s",
+                         label, name, json.dumps(prof)[:4000])
+            except Exception:
+                pass
 
     # 2) Recent posts/reposts, widening the window if empty. ALWAYS Apify — this
     #    posts path is intentionally untouched. (Bright Data has its own Posts
@@ -765,12 +890,13 @@ def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
                 "error": f"Apify error scraping posts: {exc}"}
 
     note = activity_note(used_days)
-    display_name = (fmt_field(profile or {}, "name", "fullName") or name)
-    role = _role_from_profile(profile, person.get("title", ""),
+    display_name = (fmt_field(career_profile or {}, "name", "fullName")
+                    or fmt_field(bd_profile or {}, "name", "fullName") or name)
+    role = _role_from_profile(career_profile, person.get("title", ""),
                               person.get("location", ""))
     md = build_report_md(display_name, role, clean_url, since, rows,
-                         profile=profile, window_note=note,
-                         profile_source=profile_source)
+                         profile=career_profile, window_note=note,
+                         profile_source=career_source, extras_profile=extras_profile)
 
     return {
         "name": display_name,
@@ -778,11 +904,13 @@ def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
         "url": clean_url,
         "role": role,
         "report_md": md,
-        "profile_source": profile_source,
+        "profile_source": career_source,   # career-history source (for the tag)
+        "extras_source": extras_source,    # certs/recommendations source
         "post_count": len(rows),
         "note": note,
         "profile_err": profile_err,
-        "raw_profile": profile,   # kept for the in-app debug view
+        "raw_profile": bd_profile,            # Bright Data primary response
+        "raw_profile_apify": apify_profile,   # Apify career-history fallback, if used
     }
 
 
@@ -1501,10 +1629,15 @@ def main() -> None:
                 label += f"  ·  {s.get('post_count', 0)} recent posts"
             with st.expander(label, expanded=False):
                 if ok:
-                    # Visibly tag which backend served this profile's data.
+                    # Visibly tag which backend served the career history, and
+                    # (when different) which served certs/recommendations.
                     src = s.get("profile_source")
+                    extras = s.get("extras_source")
                     if src:
-                        st.caption(f"📇 Profile data: via {src}")
+                        tag = f"📇 Career history: via {src}"
+                        if extras and extras != src:
+                            tag += f"  ·  certs/recommendations via {extras}"
+                        st.caption(tag)
                     elif s.get("profile_err"):
                         st.caption("📇 Profile data: unavailable "
                                    "(Bright Data and Apify both failed)")
@@ -1515,11 +1648,16 @@ def main() -> None:
                     render_copy_button(report, key=name)
                     # Clean, formatted report (headers, bold, bullets) — only this.
                     st.markdown(report)
-                    # Debug: raw Apify profile JSON, to confirm scrape contents.
-                    if s.get("raw_profile"):
+                    # Debug: raw responses, to confirm what each source returned.
+                    if s.get("raw_profile") or s.get("raw_profile_apify"):
                         with st.expander("🔧 Raw scrape data (debug)",
                                          expanded=False):
-                            st.json(s["raw_profile"])
+                            if s.get("raw_profile"):
+                                st.caption("Bright Data response")
+                                st.json(s["raw_profile"])
+                            if s.get("raw_profile_apify"):
+                                st.caption("Apify profile response (career-history fallback)")
+                                st.json(s["raw_profile_apify"])
                 else:
                     st.error(s.get("error", "Scrape failed."))
 

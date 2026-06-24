@@ -97,6 +97,7 @@ PPLX_ENDPOINT = "https://api.perplexity.ai/v1/responses"
 BRIGHTDATA_TRIGGER_URL = "https://api.brightdata.com/datasets/v3/trigger"
 BRIGHTDATA_PROGRESS_URL = "https://api.brightdata.com/datasets/v3/progress"
 BRIGHTDATA_SNAPSHOT_URL = "https://api.brightdata.com/datasets/v3/snapshot"
+BRIGHTDATA_SCRAPE_URL = "https://api.brightdata.com/datasets/v3/scrape"
 # Bright Data "LinkedIn people profiles" dataset id. VERIFY this against your
 # Bright Data dashboard under Web Scraper IDE and update it here if your account
 # shows a different ID.
@@ -624,6 +625,29 @@ def render_extras_md(profile: dict | None) -> list[str]:
             elif isinstance(r, str) and r.strip():
                 lines.append(f"> {r.strip()}")
         lines += ["", "---", ""]
+
+    activity = _first_nonempty_list(profile, "activity", "activities",
+                                    "liked_posts", "interactions")
+    if activity:
+        lines += ["## LinkedIn activity (likes & interactions)", ""]
+        for item in activity:
+            if not isinstance(item, dict):
+                continue
+            interaction = fmt_field(item, "interaction") or "Interacted"
+            title = fmt_field(item, "title", "text", "content")
+            link = fmt_field(item, "link", "url")
+            if not (title or link):
+                continue
+            # Trim very long titles to 200 chars so the report stays readable.
+            if title and len(title) > 200:
+                title = title[:197].rstrip() + "…"
+            lines.append(f"**{interaction}**")
+            if title:
+                lines.append(f"> {title}")
+            if link:
+                lines.append(f"[View post]({link})")
+            lines.append("")
+        lines += ["---", ""]
     return lines
 
 
@@ -809,6 +833,47 @@ def brightdata_fetch_profile(profile_url: str) -> dict | None:
     return None
 
 
+def brightdata_scrape_sync(profile_url: str) -> dict | None:
+    """Attempt a synchronous Bright Data scrape via /datasets/v3/scrape.
+    Returns the profile dict on success, None on any failure. Used as a
+    second Bright Data attempt when the async trigger returns null career
+    fields — the sync endpoint performs a real-time scrape and may return
+    fuller data than the cached async snapshot."""
+    key = os.environ.get("BRIGHTDATA_API_KEY", "").strip()
+    if not key:
+        return None
+    headers = {"Authorization": f"Bearer {key}",
+               "Content-Type": "application/json"}
+    target_url = _brightdata_profile_url(profile_url)
+    log.info("Bright Data SYNC scrape for %s", target_url)
+    try:
+        r = requests.post(
+            BRIGHTDATA_SCRAPE_URL,
+            params={"dataset_id": BRIGHTDATA_PROFILE_DATASET_ID, "format": "json"},
+            headers=headers,
+            json=[{"url": target_url}],
+            timeout=60,
+        )
+    except Exception as exc:
+        log.warning("Bright Data SYNC scrape raised for %s: %s", profile_url, exc)
+        return None
+    log.info("Bright Data SYNC %s -> HTTP %s: %s",
+             profile_url, r.status_code, (r.text or "")[:500])
+    if r.status_code not in (200, 201):
+        return None
+    try:
+        data = r.json()
+    except Exception:
+        return None
+    if isinstance(data, list):
+        return data[0] if data else None
+    if isinstance(data, dict):
+        if isinstance(data.get("data"), list) and data["data"]:
+            return data["data"][0]
+        return data
+    return None
+
+
 def perplexity_career_fallback(api_key: str, name: str, title: str,
                                 company: str) -> dict | None:
     """Last-resort career history lookup via Perplexity when both Bright Data
@@ -897,6 +962,16 @@ def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
     # 1) Profile. Bright Data PRIMARY; Apify fills in career history when Bright
     #    Data lacks it (failure/timeout OR null career fields).
     bd_profile = brightdata_fetch_profile(clean_url)
+
+    # If async BD returned no career history, try the sync endpoint — it
+    # performs a real-time scrape and may return fuller data.
+    if not _has_career_history(bd_profile):
+        bd_sync = brightdata_scrape_sync(clean_url)
+        if _has_career_history(bd_sync):
+            log.info("Bright Data SYNC returned career history for %s; "
+                     "replacing async result.", name)
+            bd_profile = bd_sync
+
     apify_profile = None
     profile_err = ""
     if not _has_career_history(bd_profile):
@@ -1723,6 +1798,20 @@ def main() -> None:
                             if s.get("raw_profile_apify"):
                                 st.caption("Apify profile response (career-history fallback)")
                                 st.json(s["raw_profile_apify"])
+                            bd_raw = s.get("raw_profile")
+                            if bd_raw and isinstance(bd_raw.get("activity"), list):
+                                st.caption("Bright Data activity — formatted")
+                                for item in bd_raw["activity"]:
+                                    if not isinstance(item, dict):
+                                        continue
+                                    interaction = item.get("interaction", "Interacted")
+                                    title = (item.get("title") or "")[:200]
+                                    link = item.get("link", "")
+                                    st.markdown(
+                                        f"**{interaction}**  \n"
+                                        + (f"> {title}\n" if title else "")
+                                        + (f"[View post]({link})" if link else "")
+                                    )
                 else:
                     st.error(s.get("error", "Scrape failed."))
 

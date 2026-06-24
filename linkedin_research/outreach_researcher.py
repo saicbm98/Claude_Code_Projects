@@ -491,6 +491,18 @@ def _has_career_history(profile: dict | None) -> bool:
     return has_exp or has_edu or has_about or has_cur_pos_array
 
 
+def _has_experience_array(profile: dict | None) -> bool:
+    """True only when the profile contains actual structured job history
+    entries. Deliberately excludes `about` and `education` — a bio tagline
+    is not career history. Used to decide whether Perplexity should run
+    regardless of whether BD returned an about text."""
+    if not profile:
+        return False
+    return bool(_first_nonempty_list(
+        profile, "experience", "experiences", "positions",
+        "workExperience", "positionHistory", "jobs"))
+
+
 def _entry_dates(e: dict) -> str:
     """Date range for one experience/education entry, across shapes:
     Apify (startDate.text/endDate.text), Bright Data (start_date/end_date or
@@ -574,6 +586,9 @@ def render_profile_section_md(profile: dict | None) -> list[str]:
         lines += [f"**Current role:** {cur_line}", ""]
     if about:
         lines += ["**About:**", "", about.strip(), ""]
+    pplx_summary = profile.get("pplx_career_summary")
+    if pplx_summary:
+        lines += ["**Career summary (Perplexity):**", "", pplx_summary.strip(), ""]
     if experience:
         lines += ["**Career history:**", ""]
         for e in experience:
@@ -997,9 +1012,12 @@ def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
         career_source = ("Bright Data" if bd_profile
                          else ("Apify" if apify_profile else None))
 
-    # Third fallback: Perplexity career narrative when both BD and Apify fail.
+    # Always run Perplexity when structured experience is missing, even if
+    # BD returned an about text. The career narrative Perplexity provides
+    # (previous roles, dates, companies) is distinct from a bio tagline and
+    # adds genuine hook-identification value.
     pplx_key = os.environ.get("PERPLEXITY_API_KEY", "").strip()
-    if not _has_career_history(career_profile) and pplx_key:
+    if not _has_experience_array(career_profile) and pplx_key:
         pplx_career = perplexity_career_fallback(
             pplx_key, name,
             title=person.get("title", "")
@@ -1008,8 +1026,15 @@ def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
                     or fmt_field((bd_profile or {}).get("current_company") or {},
                                  "name") or "",
         )
-        if _has_career_history(pplx_career):
-            career_profile, career_source = pplx_career, "Perplexity"
+        if pplx_career and pplx_career.get("about"):
+            if career_profile:
+                # BD returned partial data (about/current role). Supplement
+                # it with Perplexity's career narrative rather than replacing.
+                career_profile = dict(career_profile)
+                career_profile["pplx_career_summary"] = pplx_career["about"]
+            else:
+                # BD returned nothing usable. Use Perplexity as full source.
+                career_profile, career_source = pplx_career, "Perplexity"
 
     # Certifications/recommendations come from Bright Data when present.
     extras_profile = bd_profile

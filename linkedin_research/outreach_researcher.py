@@ -75,6 +75,10 @@ from chat_researcher import (  # noqa: E402
     scrape_profile,
 )
 
+# Override the Activity Researcher's MAX_POSTS — the outreach tool needs the
+# full activity feed for busy posters to surface every usable hook.
+MAX_POSTS = 100
+
 
 # --------------------------------------------------------------------------- #
 # Config
@@ -616,7 +620,7 @@ def render_extras_md(profile: dict | None) -> list[str]:
         if rec_count:
             lines.append(f"_{rec_count} recommendation(s) received._")
             lines.append("")
-        for r in (recs or [])[:5]:
+        for r in (recs or []):  # render all received recommendations (was [:5])
             if isinstance(r, dict):
                 txt = fmt_field(r, "text", "recommendation", "description", "body")
                 who = fmt_field(r, "name", "author", "recommender", "recommender_name")
@@ -638,9 +642,10 @@ def render_extras_md(profile: dict | None) -> list[str]:
             link = fmt_field(item, "link", "url")
             if not (title or link):
                 continue
-            # Trim very long titles to 200 chars so the report stays readable.
-            if title and len(title) > 200:
-                title = title[:197].rstrip() + "…"
+            # Trim very long titles to 400 chars so longer post snippets are not
+            # cut mid-thought (was 200).
+            if title and len(title) > 400:
+                title = title[:397].rstrip() + "…"
             lines.append(f"**{interaction}**")
             if title:
                 lines.append(f"> {title}")
@@ -1805,7 +1810,8 @@ def main() -> None:
                                     if not isinstance(item, dict):
                                         continue
                                     interaction = item.get("interaction", "Interacted")
-                                    title = (item.get("title") or "")[:200]
+                                    # 400-char trim to match render_extras_md (was 200).
+                                    title = (item.get("title") or "")[:400]
                                     link = item.get("link", "")
                                     st.markdown(
                                         f"**{interaction}**  \n"

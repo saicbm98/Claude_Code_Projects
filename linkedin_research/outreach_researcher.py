@@ -467,10 +467,10 @@ def _first_nonempty_list(profile: dict, *keys: str) -> list:
 
 
 def _has_career_history(profile: dict | None) -> bool:
-    """True if the profile dict actually carries career-history content. Used to
-    decide whether to fall back to Apify: Bright Data can return a record whose
-    experience/education/about/position are all null (see the NOTE on
-    brightdata_fetch_profile), and that must trigger the fallback too."""
+    """True only when the profile dict contains meaningful career content.
+    Intentionally excludes Bright Data's current_company dict and bare
+    position string — both are present even on null-career-history responses
+    and were causing false positives that suppressed the Apify fallback."""
     if not profile:
         return False
     has_exp = bool(_first_nonempty_list(
@@ -479,12 +479,11 @@ def _has_career_history(profile: dict | None) -> bool:
     has_edu = bool(_first_nonempty_list(
         profile, "education", "educations", "schools", "educationHistory"))
     has_about = bool(fmt_field(profile, "about", "summary", "bio"))
-    has_pos = bool(
-        fmt_field(profile, "position")
-        or isinstance(profile.get("current_company"), dict)
-        or _first_nonempty_list(profile, "currentPosition", "currentPositions",
-                                "current"))
-    return has_exp or has_edu or has_about or has_pos
+    # currentPosition from Apify is a full structured array — genuine career data.
+    # current_company from Bright Data is a name-only dict — excluded deliberately.
+    has_cur_pos_array = bool(_first_nonempty_list(
+        profile, "currentPosition", "currentPositions", "current"))
+    return has_exp or has_edu or has_about or has_cur_pos_array
 
 
 def _entry_dates(e: dict) -> str:
@@ -810,6 +809,57 @@ def brightdata_fetch_profile(profile_url: str) -> dict | None:
     return None
 
 
+def perplexity_career_fallback(api_key: str, name: str, title: str,
+                                company: str) -> dict | None:
+    """Last-resort career history lookup via Perplexity when both Bright Data
+    and Apify return no experience/education/about. Runs a cheap low-depth
+    people_search + web_search to find a career narrative and returns a minimal
+    profile dict with `about` populated, so _has_career_history returns True
+    and render_profile_section_md renders the About block. Returns None on any
+    failure so the caller can handle the total gap gracefully."""
+    if not api_key or not name:
+        return None
+    who = " ".join(x for x in (name, title, company) if x)
+    instructions = (
+        f"You are a people-research assistant. Find the professional background "
+        f"and career history of {name}"
+        + (f", currently {title} at {company}" if (title or company) else "")
+        + ". Summarise their previous roles, companies, and years of experience "
+        "in 3 to 5 factual sentences. Return plain prose only — no invented "
+        "details, no JSON, no bullet points, no headings."
+    )
+    body = {
+        "model": "openai/gpt-5-mini",
+        "instructions": instructions,
+        "input": f"Career history and professional background of {who}",
+        "reasoning": {"effort": "low"},
+        "max_steps": 3,
+        "max_output_tokens": 1000,
+        "tools": [
+            {"type": "people_search",
+             "max_tokens": 4000, "max_tokens_per_page": 500},
+            {"type": "web_search", "search_context_size": "low"},
+        ],
+    }
+    headers = {"Authorization": f"Bearer {api_key}",
+               "Content-Type": "application/json"}
+    try:
+        resp = requests.post(PPLX_ENDPOINT, headers=headers,
+                             json=body, timeout=60)
+        if resp.status_code >= 400:
+            log.warning("Perplexity career fallback HTTP %s for %s: %s",
+                        resp.status_code, name, (resp.text or "")[:300])
+            return None
+        text = _output_text(resp.json()).strip()
+        if not text:
+            return None
+        log.info("Perplexity career fallback for %s returned %d chars", name, len(text))
+        return {"name": name, "about": text}
+    except Exception as exc:
+        log.warning("Perplexity career fallback raised for %s: %s", name, exc)
+        return None
+
+
 def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
     """Deep-scrape one selected person.
 
@@ -866,6 +916,21 @@ def deep_scrape_person(apify: ApifyClient, person: dict) -> dict:
         career_profile = bd_profile or apify_profile
         career_source = ("Bright Data" if bd_profile
                          else ("Apify" if apify_profile else None))
+
+    # Third fallback: Perplexity career narrative when both BD and Apify fail.
+    pplx_key = os.environ.get("PERPLEXITY_API_KEY", "").strip()
+    if not _has_career_history(career_profile) and pplx_key:
+        pplx_career = perplexity_career_fallback(
+            pplx_key, name,
+            title=person.get("title", "")
+                  or fmt_field(bd_profile or {}, "position") or "",
+            company=person.get("company", "")
+                    or fmt_field((bd_profile or {}).get("current_company") or {},
+                                 "name") or "",
+        )
+        if _has_career_history(pplx_career):
+            career_profile, career_source = pplx_career, "Perplexity"
+
     # Certifications/recommendations come from Bright Data when present.
     extras_profile = bd_profile
     extras_source = "Bright Data" if (bd_profile and render_extras_md(bd_profile)) else None

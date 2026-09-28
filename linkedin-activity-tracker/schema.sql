@@ -20,6 +20,9 @@ create table if not exists public.posts (
   comments    integer,
   reposts     integer,
   post_type   text,                          -- e.g. 'post', 'repost'; free text so new types never break a run
+  original_author text,                      -- reposts: who wrote the original
+  original_text   text,
+  original_url    text,
   scraped_at  timestamptz not null default now()
 );
 

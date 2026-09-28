@@ -12,6 +12,7 @@ build/
 
 # Streamlit secrets — NEVER commit real API keys
 .streamlit/secrets.toml
+linkedin-activity-tracker/.streamlit/secrets.toml
 
 # Scraped LinkedIn activity reports (contain real people's personal data)
 /karina-mazur.md
